@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "eoapi-notifier"
+version = "0.0.1"
+description = "Message handler for eoAPI components"
+requires-python = ">=3.9"
+authors = [
+    { name = "Development Seed" }
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.4.2",
+]
