@@ -1,8 +1,11 @@
 """eoAPI Notifier - Message handler for eoAPI components."""
 
+from .logging import get_logger, logger, setup_logging
+
 __version__ = "0.0.1"
 
-__all__ = ["__version__", "version"]
+
+__all__ = ["__version__", "version", "get_logger", "setup_logging", "logger"]
 
 
 def version() -> None:

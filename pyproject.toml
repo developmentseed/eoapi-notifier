@@ -10,6 +10,9 @@ requires-python = ">=3.12"
 authors = [
     { name = "Development Seed" }
 ]
+dependencies = [
+    "loguru>=0.7.3",
+]
 readme = "README.md"
 license = { text = "MIT" }
 classifiers = [
@@ -72,7 +75,7 @@ strict_optional = true
 minversion = "6.0"
 addopts = [
     "--cov=eoapi_notifier",
-    "--cov-fail-under=80",
+    "--cov-fail-under=90",
     "--cov-report=term-missing",
     "--cov-report=xml",
     "--tb=short",

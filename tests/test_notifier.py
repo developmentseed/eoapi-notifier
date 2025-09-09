@@ -1,9 +1,13 @@
 """Tests for eoapi_notifier module."""
 
 from io import StringIO
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
-from eoapi_notifier import __version__, version
+from eoapi_notifier import __version__, get_logger, logger, setup_logging, version
+
+if TYPE_CHECKING:
+    from loguru._logger import Logger
 
 
 def test_version_attribute() -> None:
@@ -24,3 +28,21 @@ def test_version_function() -> None:
         output = fake_out.getvalue().strip()
         assert "eoapi-notifier version:" in output
         assert __version__ in output
+
+
+def test_logging_imports() -> None:
+    """Test that logging utilities are properly exposed from main package."""
+    # Test that functions are importable and callable
+    test_logger: Logger = get_logger()
+    assert test_logger is not None
+
+    configured_logger: Logger = setup_logging()
+    assert configured_logger is not None
+
+    # Test that the default logger is available
+    assert logger is not None
+
+    # Test basic logging functionality
+    with patch("sys.stdout", new=StringIO()):
+        logger.info("Test import message")
+        test_logger.info("Test get_logger message")
