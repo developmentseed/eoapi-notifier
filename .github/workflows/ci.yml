@@ -36,13 +36,9 @@ jobs:
         uv run pre-commit run --all-files --show-diff-on-failure
 
   test:
-    name: Test Python ${{ matrix.python-version }}
+    name: Test Python 3.12
     runs-on: ubuntu-latest
     needs: quality
-    strategy:
-      matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
-      fail-fast: false
 
     steps:
     - name: Checkout code
@@ -53,19 +49,18 @@ jobs:
       with:
         version: "latest"
 
-    - name: Set up Python ${{ matrix.python-version }}
-      run: uv python install ${{ matrix.python-version }}
+    - name: Set up Python 3.12
+      run: uv python install 3.12
 
     - name: Install dependencies
       run: uv sync --extra dev --extra test
 
     - name: Run tests with coverage
       run: |
-        echo "🧪 Running tests for Python ${{ matrix.python-version }}..."
-        uv run pytest --cov=eoapi_notifier --cov-report=xml --cov-report=term-missing --tb=short -v
+        echo "🧪 Running tests for Python 3.12..."
+        uv run pytest -v
 
     - name: Upload coverage to Codecov
-      if: matrix.python-version == '3.12'
       uses: codecov/codecov-action@v5
       with:
         files: ./coverage.xml

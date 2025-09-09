@@ -1,34 +1,26 @@
-"""
-Tests for eoapi_notifier module.
-"""
+"""Tests for eoapi_notifier module."""
 
-import re
 from io import StringIO
 from unittest.mock import patch
 
-
-from eoapi_notifier import get_version, version, __version__
-
-
-def test_get_version():
-    """Test that get_version returns a valid version string."""
-    ver = get_version()
-    assert isinstance(ver, str)
-    assert ver != ""
-    # Check if it's a valid version format (e.g., "0.0.1" or "unknown")
-    assert ver == "unknown" or re.match(r"\d+\.\d+\.\d+", ver)
+from eoapi_notifier import __version__, version
 
 
-def test_version_attribute():
-    """Test that __version__ is set."""
+def test_version_attribute() -> None:
+    """Test that __version__ is set and is a valid format."""
     assert isinstance(__version__, str)
     assert __version__ != ""
+    # Should follow semantic versioning pattern
+    parts = __version__.split(".")
+    assert len(parts) >= 3
+    for part in parts[:3]:  # Major.minor.patch should be numeric
+        assert part.isdigit()
 
 
-def test_version_function():
+def test_version_function() -> None:
     """Test that version function prints expected output."""
     with patch("sys.stdout", new=StringIO()) as fake_out:
         version()
-        output = fake_out.getvalue()
-        assert "Version:" in output
+        output = fake_out.getvalue().strip()
+        assert "eoapi-notifier version:" in output
         assert __version__ in output

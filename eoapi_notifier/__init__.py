@@ -1,27 +1,13 @@
-"""
-eoAPI Notifier - Message handler for eoAPI components.
-"""
+"""eoAPI Notifier - Message handler for eoAPI components."""
 
-import re
-from pathlib import Path
+__version__ = "0.0.1"
 
-
-def get_version():
-    """Get version from pyproject.toml."""
-    try:
-        pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
-        content = pyproject_path.read_text()
-        match = re.search(r'version\s*=\s*"([^"]+)"', content)
-        return match.group(1) if match else "unknown"
-    except Exception:
-        return "unknown"
+__all__ = ["__version__", "version"]
 
 
-__version__ = get_version()
-
-
-def version():
-    print(f"Version: {__version__}")
+def version() -> None:
+    """Print the current version."""
+    print(f"eoapi-notifier version: {__version__}")
 
 
 if __name__ == "__main__":

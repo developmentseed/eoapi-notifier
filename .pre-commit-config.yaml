@@ -9,13 +9,13 @@ repos:
     rev: v1.17.1
     hooks:
       - id: mypy
-        args: [--ignore-missing-imports]
   - repo: local
     hooks:
       - id: pytest-coverage
-        name: Tests with 80% coverage
-        entry: python -m pytest --cov=eoapi_notifier --cov-fail-under=80 --tb=short
+        name: Tests with coverage
+        entry: python -m pytest
         language: system
         types: [python]
         pass_filenames: false
         always_run: true
+

@@ -2,6 +2,10 @@
 
 Message handler for eoAPI components. A middleware tool that listens to sources for messages and forwards them to output receivers.
 
+## Requirements
+
+- Python 3.12 or higher
+
 ## Installation
 
 Install using `uv`:
