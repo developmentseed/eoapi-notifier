@@ -36,8 +36,8 @@ def test_logging_imports() -> None:
     test_logger: Any = get_logger()
     assert test_logger is not None
 
-    configured_logger: Any = setup_logging()
-    assert configured_logger is not None
+    setup_logging()  # Should not raise an exception
+    # setup_logging returns None, just verify it's callable
 
     # Test that the default logger is available
     assert logger is not None

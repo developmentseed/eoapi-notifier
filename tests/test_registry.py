@@ -110,17 +110,13 @@ class TestComponentRegistry:
 
     def test_registry_initialization(self) -> None:
         """Test registry initialization."""
-        registry: ComponentRegistry[MockPlugin, MockPluginConfig] = ComponentRegistry(
-            MockPlugin
-        )
+        registry: ComponentRegistry[MockPlugin] = ComponentRegistry(MockPlugin)
         assert registry.base_type == MockPlugin
         assert len(registry.list_registered()) == 0
 
     def test_register_component(self) -> None:
         """Test component registration."""
-        registry: ComponentRegistry[MockPlugin, MockPluginConfig] = ComponentRegistry(
-            MockPlugin
-        )
+        registry: ComponentRegistry[MockPlugin] = ComponentRegistry(MockPlugin)
 
         registry.register(
             name="test_plugin",
@@ -134,17 +130,13 @@ class TestComponentRegistry:
 
     def test_is_registered_false_for_unknown(self) -> None:
         """Test is_registered returns False for unknown component."""
-        registry: ComponentRegistry[MockPlugin, MockPluginConfig] = ComponentRegistry(
-            MockPlugin
-        )
+        registry: ComponentRegistry[MockPlugin] = ComponentRegistry(MockPlugin)
         assert not registry.is_registered("nonexistent")
 
     @patch("eoapi_notifier.core.registry.import_module")
     def test_get_component_class_successful(self, mock_import: Mock) -> None:
         """Test successful component class loading."""
-        registry: ComponentRegistry[MockPlugin, MockPluginConfig] = ComponentRegistry(
-            MockPlugin
-        )
+        registry: ComponentRegistry[MockPlugin] = ComponentRegistry(MockPlugin)
 
         # Setup mock module
         mock_module = Mock()
@@ -172,9 +164,7 @@ class TestComponentRegistry:
 
     def test_get_component_class_unknown(self) -> None:
         """Test getting unknown component raises error."""
-        registry: ComponentRegistry[MockPlugin, MockPluginConfig] = ComponentRegistry(
-            MockPlugin
-        )
+        registry: ComponentRegistry[MockPlugin] = ComponentRegistry(MockPlugin)
 
         with pytest.raises(ValueError, match="Unknown component type"):
             registry.get_component_class("nonexistent")
@@ -182,9 +172,7 @@ class TestComponentRegistry:
     @patch("eoapi_notifier.core.registry.import_module")
     def test_get_component_class_import_error(self, mock_import: Mock) -> None:
         """Test import error handling."""
-        registry: ComponentRegistry[MockPlugin, MockPluginConfig] = ComponentRegistry(
-            MockPlugin
-        )
+        registry: ComponentRegistry[MockPlugin] = ComponentRegistry(MockPlugin)
         mock_import.side_effect = ImportError("Module not found")
 
         registry.register(
@@ -200,9 +188,7 @@ class TestComponentRegistry:
     @patch("eoapi_notifier.core.registry.import_module")
     def test_create_component_success(self, mock_import: Mock) -> None:
         """Test successful component creation."""
-        registry: ComponentRegistry[MockPlugin, MockPluginConfig] = ComponentRegistry(
-            MockPlugin
-        )
+        registry: ComponentRegistry[MockPlugin] = ComponentRegistry(MockPlugin)
 
         mock_module = Mock()
         mock_module.MockPlugin = MockPlugin
@@ -226,9 +212,7 @@ class TestComponentRegistry:
     @patch("eoapi_notifier.core.registry.import_module")
     def test_create_component_invalid_config(self, mock_import: Mock) -> None:
         """Test component creation with invalid config."""
-        registry: ComponentRegistry[MockPlugin, MockPluginConfig] = ComponentRegistry(
-            MockPlugin
-        )
+        registry: ComponentRegistry[MockPlugin] = ComponentRegistry(MockPlugin)
 
         mock_module = Mock()
         mock_module.MockPlugin = MockPlugin
@@ -317,12 +301,8 @@ class TestBuiltinRegistries:
 
     def test_registry_isolation(self) -> None:
         """Test that different registry instances are isolated."""
-        reg1: ComponentRegistry[MockPlugin, MockPluginConfig] = ComponentRegistry(
-            MockPlugin
-        )
-        reg2: ComponentRegistry[MockPlugin, MockPluginConfig] = ComponentRegistry(
-            MockPlugin
-        )
+        reg1: ComponentRegistry[MockPlugin] = ComponentRegistry(MockPlugin)
+        reg2: ComponentRegistry[MockPlugin] = ComponentRegistry(MockPlugin)
 
         reg1.register("plugin1", "module1", "Class1", "Config1")
         reg2.register("plugin2", "module2", "Class2", "Config2")
@@ -339,9 +319,7 @@ class TestRegistryEdgeCases:
     @patch("eoapi_notifier.core.registry.import_module")
     def test_missing_class_in_module(self, mock_import: Mock) -> None:
         """Test handling of missing class in module."""
-        registry: ComponentRegistry[MockPlugin, MockPluginConfig] = ComponentRegistry(
-            MockPlugin
-        )
+        registry: ComponentRegistry[MockPlugin] = ComponentRegistry(MockPlugin)
         mock_module = Mock(spec=[])  # Empty spec means no attributes
         mock_import.return_value = mock_module
 
@@ -358,9 +336,7 @@ class TestRegistryEdgeCases:
     @patch("eoapi_notifier.core.registry.import_module")
     def test_wrong_base_class(self, mock_import: Mock) -> None:
         """Test handling of class with wrong base class."""
-        registry: ComponentRegistry[MockPlugin, MockPluginConfig] = ComponentRegistry(
-            MockPlugin
-        )
+        registry: ComponentRegistry[MockPlugin] = ComponentRegistry(MockPlugin)
         mock_module = Mock()
 
         class WrongBaseClass:
@@ -385,9 +361,7 @@ class TestRegistryEdgeCases:
     @patch("eoapi_notifier.core.registry.import_module")
     def test_wrong_config_base_class(self, mock_import: Mock) -> None:
         """Test handling of config class with wrong base class."""
-        registry: ComponentRegistry[MockPlugin, MockPluginConfig] = ComponentRegistry(
-            MockPlugin
-        )
+        registry: ComponentRegistry[MockPlugin] = ComponentRegistry(MockPlugin)
         mock_module = Mock()
 
         class WrongConfigClass:
@@ -406,5 +380,5 @@ class TestRegistryEdgeCases:
             config_class_name="WrongConfig",
         )
 
-        with pytest.raises(TypeError, match="is not a Pydantic model"):
+        with pytest.raises(TypeError, match="is not a subclass of BasePluginConfig"):
             registry.get_component_class("wrong_config")

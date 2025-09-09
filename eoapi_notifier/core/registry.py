@@ -9,7 +9,7 @@ import logging
 from importlib import import_module
 from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from .plugin import BaseOutput, BasePlugin, BasePluginConfig, BaseSource, PluginError
 
@@ -17,10 +17,9 @@ logger = logging.getLogger(__name__)
 
 # Type variables for generic registry
 T = TypeVar("T", bound=BasePlugin[Any])
-C = TypeVar("C", bound=BasePluginConfig)
 
 
-class ComponentRegistry(Generic[T, C]):
+class ComponentRegistry(Generic[T]):
     """Type-safe registry for plugin components with lazy loading."""
 
     def __init__(self, base_type: type[T]) -> None:
@@ -29,7 +28,9 @@ class ComponentRegistry(Generic[T, C]):
         self._registered: dict[
             str, tuple[str, str, str]
         ] = {}  # name -> (module, class, config_class)  # noqa: E501
-        self._loaded_classes: dict[str, tuple[type[T], type[C]]] = {}  # cached classes
+        self._loaded_classes: dict[
+            str, tuple[type[T], type[Any]]
+        ] = {}  # cached classes
 
     def register(
         self,
@@ -50,7 +51,7 @@ class ComponentRegistry(Generic[T, C]):
         """List all registered component names."""
         return list(self._registered.keys())
 
-    def get_component_class(self, name: str) -> tuple[type[T], type[C]]:
+    def get_component_class(self, name: str) -> tuple[type[T], type[Any]]:
         """Get component and config classes, loading if needed."""
         if name not in self._registered:
             raise ValueError(f"Unknown component type: {name}")
@@ -74,13 +75,15 @@ class ComponentRegistry(Generic[T, C]):
 
             # Get config class
             config_class = getattr(module, config_class_name)
-            if not issubclass(config_class, BaseModel):
-                raise TypeError(f"{config_class_name} is not a Pydantic model")
+            if not issubclass(config_class, BasePluginConfig):
+                raise TypeError(
+                    f"{config_class_name} is not a subclass of BasePluginConfig"
+                )
 
-            # Cache and return
+            # Cache and return - runtime validation ensures type safety
             self._loaded_classes[name] = (component_class, config_class)
             logger.debug(f"Loaded {name}: {class_name} with {config_class_name}")
-            return component_class, config_class
+            return (component_class, config_class)
 
         except ImportError as e:
             raise ImportError(f"Cannot import module {module_path}: {e}") from e
@@ -104,7 +107,7 @@ class ComponentRegistry(Generic[T, C]):
             raise PluginError(name, f"Failed to create instance: {e}") from e
 
 
-class SourceRegistry(ComponentRegistry[BaseSource[Any], BasePluginConfig]):
+class SourceRegistry(ComponentRegistry[BaseSource[Any]]):
     """Registry for notification sources."""
 
     def __init__(self) -> None:
@@ -121,7 +124,7 @@ class SourceRegistry(ComponentRegistry[BaseSource[Any], BasePluginConfig]):
         )
 
 
-class OutputRegistry(ComponentRegistry[BaseOutput[Any], BasePluginConfig]):
+class OutputRegistry(ComponentRegistry[BaseOutput[Any]]):
     """Registry for notification outputs."""
 
     def __init__(self) -> None:

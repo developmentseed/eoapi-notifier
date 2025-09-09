@@ -467,7 +467,7 @@ class TestRegistryIntegration:
         ],
     )
     def test_registry_built_in_plugins(
-        self, registry: ComponentRegistry[Any, Any], plugin_type: str
+        self, registry: ComponentRegistry[Any], plugin_type: str
     ) -> None:
         """Test built-in plugin registration."""
         assert registry.is_registered(plugin_type)

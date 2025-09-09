@@ -1,4 +1,4 @@
-# eoAPI Notifier
+# eoAPI-notifier
 
 Message handler for eoAPI components. A middleware tool that listens to sources for messages and forwards them to output receivers.
 
@@ -12,6 +12,36 @@ Install using `uv`:
 
 ```bash
 uv add eoapi-notifier
+```
+
+## Usage
+
+The notifier provides a CLI tool to run the message handler with a YAML configuration file.
+
+### Command Line Interface
+
+Run the notifier with a configuration file:
+
+```bash
+eoapi-notifier config.yaml
+```
+
+Set logging level:
+
+```bash
+eoapi-notifier --log-level DEBUG config.yaml
+```
+
+Show help:
+
+```bash
+eoapi-notifier --help
+```
+
+Show version:
+
+```bash
+eoapi-notifier --version
 ```
 
 ## Testing
