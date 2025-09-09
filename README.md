@@ -69,6 +69,18 @@ outputs:
 
 See [examples/config.yaml](./examples/config.yaml) for a complete configuration example with all available options.
 
+## Kubernetes Deployment
+
+```bash
+# Install with Helm
+helm install eoapi-notifier oci://ghcr.io/developmentseed/charts/eoapi-notifier
+
+# With custom values
+helm install eoapi-notifier oci://ghcr.io/developmentseed/charts/eoapi-notifier -f values.yaml
+```
+
+See [Helm Chart README](helm-chart/eoapi-notifier/README.md) for configuration options.
+
 ### Available Plugins
 
 #### Sources

@@ -1,0 +1,66 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'eoapi_notifier/**'
+      - 'helm-chart/**'
+      - 'tests/**'
+      - '.github/workflows/test.yml'
+
+env:
+  IMAGE_NAME: eoapi-notifier
+
+jobs:
+  test:
+    name: Test Docker and Helm
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker image
+        run: |
+          docker run --rm ${{ env.IMAGE_NAME }}:test --help
+          docker run --rm ${{ env.IMAGE_NAME }}:test --version
+          docker run --rm ${{ env.IMAGE_NAME }}:test /nonexistent/config.yaml || echo "Expected error handled"
+
+      - name: Test Helm chart
+        run: |
+          helm lint helm-chart/eoapi-notifier
+          helm template test helm-chart/eoapi-notifier --debug > /dev/null
+          echo "✅ Helm chart linting and templating passed"

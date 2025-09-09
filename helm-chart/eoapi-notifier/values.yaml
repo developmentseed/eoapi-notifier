@@ -1,0 +1,65 @@
+# Default values for eoapi-notifier
+replicaCount: 1
+
+image:
+  repository: eoapi-notifier
+  pullPolicy: IfNotPresent
+  tag: ""
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Application configuration
+config:
+  logLevel: INFO
+  sources:
+    - type: postgres
+      config:
+        host: postgresql
+        port: 5432
+        database: postgis
+        username: postgres
+        password: password
+
+  outputs:
+    - type: mqtt
+      config:
+        broker_host: mqtt-broker
+        broker_port: 1883
+
+# Secrets
+secrets:
+  postgresql:
+    create: true
+    username: postgres
+    password: password

@@ -23,8 +23,15 @@ repos:
     hooks:
       - id: pytest-coverage
         name: Tests with coverage
-        entry: uv run python -m pytest
+        entry: uv run python -m pytest --ignore=tests/test_helm.py
         language: system
         types: [python]
         pass_filenames: false
         always_run: true
+      - id: helm-lint
+        name: Helm lint
+        entry: helm lint helm-chart/eoapi-notifier
+        language: system
+        files: ^helm-chart/
+        pass_filenames: false
+

@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{include "eoapi-notifier.fullname" .}}
+  labels:
+    {{- include "eoapi-notifier.labels" . | nindent 4}}
+spec:
+  replicas: {{.Values.replicaCount}}
+  selector:
+    matchLabels:
+      {{- include "eoapi-notifier.selectorLabels" . | nindent 6}}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{include (print $.Template.BasePath "/configmap.yaml") . | sha256sum}}
+        checksum/secret: {{include (print $.Template.BasePath "/secret-postgresql.yaml") . | sha256sum}}
+      labels:
+        {{- include "eoapi-notifier.selectorLabels" . | nindent 8}}
+    spec:
+      serviceAccountName: {{include "eoapi-notifier.serviceAccountName" .}}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8}}
+      initContainers:
+        - name: config-processor
+          image: alpine:3.19
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Processing configuration with environment variables..."
+
+              # Read the template config and replace placeholders
+              sed -e "s/__POSTGRES_USERNAME__/${POSTGRES_USERNAME}/g" \
+                  -e "s/__POSTGRES_PASSWORD__/${POSTGRES_PASSWORD}/g" \
+                  /app/config-template/config.yaml > /app/config-processed/config.yaml
+
+              echo "Configuration processed successfully"
+              cat /app/config-processed/config.yaml
+          env:
+            {{- if .Values.secrets.postgresql.create}}
+            - name: POSTGRES_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{include "eoapi-notifier.fullname" .}}-postgresql
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{include "eoapi-notifier.fullname" .}}-postgresql
+                  key: password
+            {{- end}}
+          volumeMounts:
+            - name: config-template
+              mountPath: /app/config-template
+              readOnly: true
+            - name: config-processed
+              mountPath: /app/config-processed
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+      containers:
+        - name: {{.Chart.Name}}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12}}
+          image: "{{.Values.image.repository}}:{{.Values.image.tag | default .Chart.AppVersion}}"
+          imagePullPolicy: {{.Values.image.pullPolicy}}
+          command:
+            - "uv"
+            - "run"
+            - "eoapi-notifier"
+          args:
+            - "--log-level"
+            - "{{.Values.config.logLevel}}"
+            - "/app/config/config.yaml"
+          env:
+            - name: UV_CACHE_DIR
+              value: "/tmp"
+          resources:
+            {{- toYaml .Values.resources | nindent 12}}
+          volumeMounts:
+            - name: config-processed
+              mountPath: /app/config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config-template
+          configMap:
+            name: {{include "eoapi-notifier.fullname" .}}
+        - name: config-processed
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector}}
+      nodeSelector:
+        {{- toYaml . | nindent 8}}
+      {{- end}}
+      {{- with .Values.affinity}}
+      affinity:
+        {{- toYaml . | nindent 8}}
+      {{- end}}
+      {{- with .Values.tolerations}}
+      tolerations:
+        {{- toYaml . | nindent 8}}
+      {{- end}}

@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "eoapi-notifier.fullname" . }}-test-deployment"
+  labels:
+    {{- include "eoapi-notifier.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+  - name: deployment-test
+    image: alpine:3.19
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -e
+      echo "🧪 Testing eoapi-notifier deployment configuration..."
+
+      # Test that we can resolve the service account
+      if [ ! -f /var/run/secrets/kubernetes.io/serviceaccount/token ]; then
+        echo "❌ ServiceAccount not properly mounted"
+        exit 1
+      fi
+      echo "✅ ServiceAccount mounted correctly"
+
+      # Test that environment variables are set
+      if [ -z "$TEST_REPLICA_COUNT" ]; then
+        echo "❌ Replica count not set"
+        exit 1
+      fi
+      echo "✅ Configuration values accessible"
+
+      # Test image configuration
+      if [ -z "$TEST_IMAGE_REPO" ]; then
+        echo "❌ Image repository not set"
+        exit 1
+      fi
+      echo "✅ Image configuration correct"
+
+      echo "✅ Deployment test passed"
+    env:
+    - name: TEST_REPLICA_COUNT
+      value: "{{ .Values.replicaCount }}"
+    - name: TEST_IMAGE_REPO
+      value: "{{ .Values.image.repository }}"
+  serviceAccountName: {{ include "eoapi-notifier.serviceAccountName" . }}

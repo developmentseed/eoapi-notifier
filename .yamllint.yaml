@@ -59,3 +59,5 @@ ignore: |
   *.min.yaml
   # Ignore GitHub Actions workflows (handled by actionlint)
   .github/workflows/
+  # Ignore Helm chart templates (contain Go templating syntax)
+  helm-chart/

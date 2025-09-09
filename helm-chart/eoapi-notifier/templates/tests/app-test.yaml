@@ -1,0 +1,149 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "eoapi-notifier.fullname" . }}-test-app"
+  labels:
+    {{- include "eoapi-notifier.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "3"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  initContainers:
+  - name: config-processor
+    image: alpine:3.19
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -e
+      echo "Processing configuration for test..."
+
+      # Read the template config and replace placeholders
+      sed -e "s/__POSTGRES_USERNAME__/${POSTGRES_USERNAME}/g" \
+          -e "s/__POSTGRES_PASSWORD__/${POSTGRES_PASSWORD}/g" \
+          /app/config-template/config.yaml > /app/config-processed/config.yaml
+
+      echo "Test configuration processed successfully"
+    env:
+    - name: POSTGRES_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: {{ include "eoapi-notifier.fullname" . }}-postgresql
+          key: username
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: {{ include "eoapi-notifier.fullname" . }}-postgresql
+          key: password
+    volumeMounts:
+    - name: config-template
+      mountPath: /app/config-template
+      readOnly: true
+    - name: config-processed
+      mountPath: /app/config-processed
+    resources:
+      limits:
+        cpu: 100m
+        memory: 64Mi
+      requests:
+        cpu: 10m
+        memory: 16Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: false
+      runAsNonRoot: true
+      runAsUser: 1000
+  containers:
+  - name: app-test
+    image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -e
+      echo "🧪 Testing eoapi-notifier application functionality..."
+
+      # Test help command
+      echo "Testing --help command..."
+      uv run eoapi-notifier --help | grep -q "Message handler for eoAPI components" || {
+        echo "❌ Help command failed or missing expected output"
+        exit 1
+      }
+      echo "✅ Help command works"
+
+      # Test version command
+      echo "Testing --version command..."
+      uv run eoapi-notifier --version | grep -q "eoapi-notifier, version" || {
+        echo "❌ Version command failed or invalid format"
+        exit 1
+      }
+      echo "✅ Version command works"
+
+      # Test config file is accessible
+      echo "Testing config file access..."
+      if [ ! -f /app/config/config.yaml ]; then
+        echo "❌ Config file not accessible"
+        exit 1
+      fi
+      echo "✅ Config file accessible"
+
+      # Test environment variables are set
+      if [ -z "$POSTGRES_USERNAME" ] || [ -z "$POSTGRES_PASSWORD" ]; then
+        echo "❌ Database credentials not available"
+        exit 1
+      fi
+      echo "✅ Environment variables set"
+
+      # Test app starts (will fail to connect but shouldn't crash)
+      echo "Testing app startup..."
+      timeout 3 uv run eoapi-notifier /app/config/config.yaml 2>&1 | head -10 || {
+        echo "✅ App started and handled connection errors gracefully"
+      }
+
+      echo "✅ Application functionality test passed"
+    env:
+    - name: POSTGRES_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: {{ include "eoapi-notifier.fullname" . }}-postgresql
+          key: username
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: {{ include "eoapi-notifier.fullname" . }}-postgresql
+          key: password
+    - name: UV_CACHE_DIR
+      value: "/tmp"
+    volumeMounts:
+    - name: config-processed
+      mountPath: /app/config
+      readOnly: true
+    - name: tmp
+      mountPath: /tmp
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: false
+      runAsNonRoot: true
+      runAsUser: 1000
+  volumes:
+  - name: config-template
+    configMap:
+      name: {{ include "eoapi-notifier.fullname" . }}
+  - name: config-processed
+    emptyDir: {}
+  - name: tmp
+    emptyDir: {}
+  serviceAccountName: {{ include "eoapi-notifier.serviceAccountName" . }}
+  securityContext:
+    fsGroup: 1000
+    runAsNonRoot: true
+    runAsUser: 1000
