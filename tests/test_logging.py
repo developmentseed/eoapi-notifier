@@ -1,4 +1,4 @@
-"""Tests for eoapi_notifier logging utilities using loguru."""
+"""Tests for logging utilities using loguru."""
 
 from io import StringIO
 from unittest.mock import patch
