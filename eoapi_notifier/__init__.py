@@ -1,8 +1,10 @@
 """eoAPI Notifier - Message handler for eoAPI components."""
 
+from importlib.metadata import version as _version
+
 from .logging import get_logger, logger, setup_logging
 
-__version__ = "0.0.1"
+__version__ = _version("eoapi-notifier")
 
 
 __all__ = ["__version__", "version", "get_logger", "setup_logging", "logger"]
