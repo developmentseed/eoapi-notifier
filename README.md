@@ -58,12 +58,22 @@ sources:
       database: postgis
       username: username
       password: password
+
+# Outputs: Define where notifications are sent
+outputs:
+  - type: mqtt
+    config:
+      broker_host: localhost
+      broker_port: 1883
 ```
 
 ### Available Plugins
 
 #### Sources
 - `postgres`: Monitor PostgreSQL/pgSTAC database changes
+
+#### Outputs
+- `mqtt`: Publish events to MQTT broker
 
 ## Testing
 

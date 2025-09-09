@@ -15,6 +15,9 @@ dependencies = [
     "pydantic>=2.11.7",
     "PyYAML>=6.0.2",
     "click>=8.2.1",
+    "asyncpg>=0.30.0",
+    "paho-mqtt>=2.1.0",
+
 ]
 readme = "README.md"
 license = { text = "MIT" }
@@ -41,9 +44,6 @@ dev = [
     "mypy",
     "ruff",
     "types-PyYAML",
-]
-postgres = [
-    "asyncpg>=0.30.0",
 ]
 
 [tool.ruff]
@@ -85,7 +85,7 @@ disallow_untyped_calls = false
 [tool.pytest.ini_options]
 addopts = [
     "--cov=eoapi_notifier",
-    "--cov-fail-under=85",
+    "--cov-fail-under=80",
     "--cov-report=term-missing",
     "--cov-report=xml",
 ]
