@@ -77,34 +77,18 @@ See [examples/config.yaml](./examples/config.yaml) for a complete configuration 
 #### Outputs
 - `mqtt`: Publish events to MQTT broker
 
-## Testing
-
-Install test dependencies and run tests with `uv`:
-
-```bash
-uv sync --extra test
-uv run pytest
-```
-
 ## Development
 
-Install development dependencies including pre-commit:
+For development setup, testing, and creating new plugins, see the [Development Guide](docs/development.md).
 
-```bash
-uv sync --extra dev
-```
+## Contributing
 
-Set up pre-commit hooks:
+We welcome contributions to eoAPI-notifier! Whether you want to fix a bug, add a new feature, or create a custom plugin, your contributions are appreciated.
 
-```bash
-uv run pre-commit install
-```
+- Found a bug or have a feature request? [Open an issue](https://github.com/developmentseed/eoapi-notifier/issues).
+- Have a fix, improvement, or you want to add a new plugin? [Submit a pull request](https://github.com/developmentseed/eoapi-notifier/pulls) with your changes.
 
-Run pre-commit manually:
-
-```bash
-uv run pre-commit run --all-files
-```
+Please make sure to read the [Development Guide](docs/development.md) for setup instructions and coding standards.
 
 ## License
 
