@@ -1,12 +1,9 @@
 """Logging utilities for eoapi_notifier using loguru."""
 
 import sys
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from loguru import logger
-
-if TYPE_CHECKING:
-    from loguru._logger import Logger
 
 
 def setup_logging(
@@ -14,7 +11,7 @@ def setup_logging(
     format_string: str | None = None,
     include_timestamp: bool = True,
     sink: Any | None = None,
-) -> "Logger":
+) -> Any:
     """Set up logging for the eoapi_notifier package using loguru.
 
     Args:
@@ -62,7 +59,7 @@ def setup_logging(
     return logger
 
 
-def get_logger(name: str | None = None) -> "Logger":
+def get_logger(name: str | None = None) -> Any:
     """Get a logger instance for the eoapi_notifier package.
 
     With loguru, there's typically one global logger instance,
