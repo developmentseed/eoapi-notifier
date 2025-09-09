@@ -6,7 +6,6 @@ import re
 from io import StringIO
 from unittest.mock import patch
 
-import pytest
 
 from eoapi_notifier import get_version, version, __version__
 
@@ -28,7 +27,7 @@ def test_version_attribute():
 
 def test_version_function():
     """Test that version function prints expected output."""
-    with patch('sys.stdout', new=StringIO()) as fake_out:
+    with patch("sys.stdout", new=StringIO()) as fake_out:
         version()
         output = fake_out.getvalue()
         assert "Version:" in output

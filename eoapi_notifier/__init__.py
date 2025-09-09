@@ -5,6 +5,7 @@ eoAPI Notifier - Message handler for eoAPI components.
 import re
 from pathlib import Path
 
+
 def get_version():
     """Get version from pyproject.toml."""
     try:
@@ -15,10 +16,13 @@ def get_version():
     except Exception:
         return "unknown"
 
+
 __version__ = get_version()
+
 
 def version():
     print(f"Version: {__version__}")
+
 
 if __name__ == "__main__":
     version()
