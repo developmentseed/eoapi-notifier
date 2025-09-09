@@ -84,6 +84,9 @@ jobs:
     - name: Set up Python
       run: uv python install 3.12
 
+    - name: Create virtual environment
+      run: uv venv
+
     - name: Build package
       run: |
         echo "📦 Building Python package..."
@@ -92,8 +95,8 @@ jobs:
     - name: Verify package installation
       run: |
         echo "✅ Verifying package can be installed..."
-        uv pip install dist/*.whl --system
-        python -c "import eoapi_notifier; print('Package installed successfully')"
+        uv pip install dist/*.whl
+        uv run python -c "import eoapi_notifier; print('Package installed successfully')"
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
