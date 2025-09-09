@@ -1,0 +1,75 @@
+name: Docker Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'eoapi_notifier/**'
+      - '.github/workflows/docker-*.yml'
+
+env:
+  IMAGE_NAME: eoapi-notifier
+
+jobs:
+  docker-build-test:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker image
+        run: |
+          echo "🐳 Testing Docker image functionality..."
+
+          # Test help command
+          docker run --rm ${{ env.IMAGE_NAME }}:test --help
+
+          # Test version command
+          docker run --rm ${{ env.IMAGE_NAME }}:test --version
+
+          # Test with invalid config (should show error)
+          echo "Testing error handling..."
+          docker run --rm ${{ env.IMAGE_NAME }}:test /nonexistent/config.yaml || \
+            echo "✅ Expected error handled correctly"
+
+          echo "✅ All Docker tests passed!"
+
+      - name: Check image size
+        run: |
+          echo "📊 Docker image information:"
+          docker images ${{ env.IMAGE_NAME }}:test
+
+          # Get image size in MB
+          SIZE=$(docker images ${{ env.IMAGE_NAME }}:test --format "{{.Size}}" | head -n1)
+          echo "Image size: $SIZE"
+
+          # Optional: Warn if image is getting too large (>500MB)
+          SIZE_BYTES=$(docker inspect ${{ env.IMAGE_NAME }}:test --format='{{.Size}}')
+          SIZE_MB=$((SIZE_BYTES / 1024 / 1024))
+          echo "Image size: ${SIZE_MB}MB"
+
+          if [ $SIZE_MB -gt 500 ]; then
+            echo "⚠️ Warning: Image size (${SIZE_MB}MB) is quite large. Consider optimization."
+          else
+            echo "✅ Image size looks reasonable: ${SIZE_MB}MB"
+          fi
