@@ -1,0 +1,70 @@
+# eoAPI Notifier Configuration Example
+# This file shows how to configure sources and outputs for the notifier
+
+# Sources: Define where notifications come from
+sources:
+  # PostgreSQL/pgSTAC source for database changes
+  - type: postgres
+    config:
+      host: localhost
+      port: 5432
+      database: postgis
+      username: username
+      password: password
+      # Optional: specific table patterns to monitor
+      # tables: ["items", "collections"]
+      # Optional: connection pool settings
+      # min_connections: 1
+      # max_connections: 10
+
+# Outputs: Define where notifications are sent
+outputs:
+  # MQTT output for publishing events
+  - type: mqtt
+    config:
+      broker_host: localhost
+      broker_port: 1883
+      # Optional: authentication
+      # username: mqtt_user
+      # password: mqtt_password
+      # Optional: TLS settings
+      # use_tls: true
+      # ca_cert: /path/to/ca.pem
+      # Optional: topic configuration
+      # topic_prefix: "eoapi/"
+      # qos: 1
+
+# Example with multiple sources and outputs:
+# sources:
+#   - type: postgres
+#     config:
+#       host: db1.example.com
+#       port: 5432
+#       database: stac_db
+#       username: notifier
+#       password: secret123
+#   
+#   - type: postgres
+#     config:
+#       host: db2.example.com
+#       port: 5432
+#       database: another_db
+#       username: notifier
+#       password: secret456
+
+# outputs:
+#   - type: mqtt
+#     config:
+#       broker_host: mqtt.example.com
+#       broker_port: 8883
+#       username: publisher
+#       password: pub_secret
+#       use_tls: true
+#   
+#   # Future: webhook output example
+#   # - type: webhook
+#   #   config:
+#   #     url: https://api.example.com/notifications
+#   #     headers:
+#   #       Authorization: Bearer token123
+#   #     timeout: 30

@@ -67,6 +67,8 @@ outputs:
       broker_port: 1883
 ```
 
+See [examples/config.yaml](./examples/config.yaml) for a complete configuration example with all available options.
+
 ### Available Plugins
 
 #### Sources
