@@ -34,7 +34,7 @@ outputs:
       # topic_prefix: "eoapi/"
       # qos: 1
 
-# Example with multiple sources and outputs:
+# Example with multiple sources and outputs
 # sources:
 #   - type: postgres
 #     config:
@@ -43,7 +43,7 @@ outputs:
 #       database: stac_db
 #       username: notifier
 #       password: secret123
-#   
+#
 #   - type: postgres
 #     config:
 #       host: db2.example.com
@@ -60,11 +60,11 @@ outputs:
 #       username: publisher
 #       password: pub_secret
 #       use_tls: true
-#   
+#
 #   # Future: webhook output example
 #   # - type: webhook
 #   #   config:
 #   #     url: https://api.example.com/notifications
 #   #     headers:
 #   #       Authorization: Bearer token123
-#   #     timeout: 30
+#   #       timeout: 30

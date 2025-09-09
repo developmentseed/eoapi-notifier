@@ -1,0 +1,61 @@
+extends: default
+
+rules:
+  # Allow longer lines for GitHub Actions expressions and commands
+  line-length:
+    max: 120
+    level: warning
+
+  # Allow trailing spaces (sometimes needed in YAML multiline strings)
+  trailing-spaces:
+    level: warning
+
+  # Don't require document start marker (---)
+  document-start:
+    present: false
+
+  # Be lenient with truthy values (GitHub Actions uses "on", etc.)
+  truthy:
+    allowed-values: ['true', 'false', 'on', 'off', 'yes', 'no']
+    check-keys: false
+
+  # Allow multiple spaces after colons (useful for alignment)
+  colons:
+    max-spaces-before: -1
+    max-spaces-after: -1
+
+  # Allow multiple consecutive blank lines
+  empty-lines:
+    max: 2
+    max-start: 1
+    max-end: 1
+
+  # Be flexible with indentation in sequences
+  indentation:
+    spaces: 2
+    indent-sequences: true
+    check-multi-line-strings: false
+
+  # Don't enforce key ordering
+  key-ordering: disable
+
+  # Allow duplicate keys in some cases (can be useful in CI contexts)
+  key-duplicates: enable
+
+  # Allow octal values (sometimes used in file permissions)
+  octal-values:
+    forbid-implicit-octal: false
+
+ignore: |
+  # Ignore generated or external files
+  .venv/
+  .mypy_cache/
+  .pytest_cache/
+  .ruff_cache/
+  node_modules/
+  dist/
+  build/
+  *.min.yml
+  *.min.yaml
+  # Ignore GitHub Actions workflows (handled by actionlint)
+  .github/workflows/

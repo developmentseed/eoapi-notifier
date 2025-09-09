@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
 
 jobs:
@@ -10,30 +10,30 @@ jobs:
     name: Code Quality
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v5
+      - name: Checkout code
+        uses: actions/checkout@v5
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v3
-      with:
-        version: "latest"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
 
-    - name: Set up Python
-      run: uv python install 3.12
+      - name: Set up Python
+        run: uv python install 3.12
 
-    - name: Cache pre-commit
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pre-commit
-        key: ${{ runner.os }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Cache pre-commit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: ${{ runner.os }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
 
-    - name: Install dependencies
-      run: uv sync --extra dev --extra test
+      - name: Install dependencies
+        run: uv sync --extra dev --extra test
 
-    - name: Run code quality checks
-      run: |
-        echo "🔍 Running all code quality checks..."
-        uv run pre-commit run --all-files --show-diff-on-failure
+      - name: Run code quality checks
+        run: |
+          echo "🔍 Running all code quality checks..."
+          uv run pre-commit run --all-files --show-diff-on-failure
 
   test:
     name: Test Python 3.12
@@ -41,65 +41,65 @@ jobs:
     needs: quality
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v5
+      - name: Checkout code
+        uses: actions/checkout@v5
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v3
-      with:
-        version: "latest"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
 
-    - name: Set up Python 3.12
-      run: uv python install 3.12
+      - name: Set up Python 3.12
+        run: uv python install 3.12
 
-    - name: Install dependencies
-      run: uv sync --extra dev --extra test
+      - name: Install dependencies
+        run: uv sync --extra dev --extra test
 
-    - name: Run tests with coverage
-      run: |
-        echo "🧪 Running tests for Python 3.12..."
-        uv run pytest -v
+      - name: Run tests with coverage
+        run: |
+          echo "🧪 Running tests for Python 3.12..."
+          uv run pytest -v
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5
-      with:
-        files: ./coverage.xml
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
 
   build:
     name: Build & Verify Package
     runs-on: ubuntu-latest
     needs: [quality, test]
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v5
+      - name: Checkout code
+        uses: actions/checkout@v5
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v3
-      with:
-        version: "latest"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
 
-    - name: Set up Python
-      run: uv python install 3.12
+      - name: Set up Python
+        run: uv python install 3.12
 
-    - name: Create virtual environment
-      run: uv venv
+      - name: Create virtual environment
+        run: uv venv
 
-    - name: Build package
-      run: |
-        echo "📦 Building Python package..."
-        uv build
+      - name: Build package
+        run: |
+          echo "📦 Building Python package..."
+          uv build
 
-    - name: Verify package installation
-      run: |
-        echo "✅ Verifying package can be installed..."
-        uv pip install dist/*.whl
-        uv run python -c "import eoapi_notifier; print('Package installed successfully')"
+      - name: Verify package installation
+        run: |
+          echo "✅ Verifying package can be installed..."
+          uv pip install dist/*.whl
+          uv run python -c "import eoapi_notifier; print('Package installed successfully')"
 
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: python-package-distributions
-        path: dist/
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/

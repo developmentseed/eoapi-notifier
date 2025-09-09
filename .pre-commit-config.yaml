@@ -10,6 +10,15 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [pydantic>=2.11.7, loguru>=0.7.3, types-PyYAML]
+  - repo: https://github.com/adrienverge/yamllint.git
+    rev: v1.37.1
+    hooks:
+      - id: yamllint
+        args: [-c=.yamllint.yaml]
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      - id: actionlint
   - repo: local
     hooks:
       - id: pytest-coverage
@@ -19,4 +28,3 @@ repos:
         types: [python]
         pass_filenames: false
         always_run: true
-
