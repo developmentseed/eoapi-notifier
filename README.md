@@ -44,6 +44,27 @@ Show version:
 eoapi-notifier --version
 ```
 
+### Configuration
+
+Create a YAML configuration file to specify sources (where messages come from) and outputs (where messages are sent). Here's a basic example:
+
+```yaml
+# Sources: Define where notifications come from
+sources:
+  - type: postgres
+    config:
+      host: localhost
+      port: 5432
+      database: postgis
+      username: username
+      password: password
+```
+
+### Available Plugins
+
+#### Sources
+- `postgres`: Monitor PostgreSQL/pgSTAC database changes
+
 ## Testing
 
 Install test dependencies and run tests with `uv`:
