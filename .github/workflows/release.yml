@@ -24,7 +24,7 @@ jobs:
       - name: Extract version
         id: version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION=${GITHUB_REF#refs/tags/}
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
@@ -62,8 +62,8 @@ jobs:
 
       - name: Update Chart.yaml
         run: |
-          sed -i "s/^version:.*/version: ${{ steps.version.outputs.version }}/" helm-chart/${{ env.CHART_NAME }}/Chart.yaml
-          sed -i "s/^appVersion:.*/appVersion: \"${{ steps.version.outputs.version }}\"/" helm-chart/${{ env.CHART_NAME }}/Chart.yaml
+          sed -i "s|^version:.*|version: ${{ steps.version.outputs.version }}|" helm-chart/${{ env.CHART_NAME }}/Chart.yaml
+          sed -i "s|^appVersion:.*|appVersion: \"${{ steps.version.outputs.version }}\"|" helm-chart/${{ env.CHART_NAME }}/Chart.yaml
 
       - name: Lint and package Helm chart
         run: |
