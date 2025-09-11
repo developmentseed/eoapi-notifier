@@ -4,7 +4,7 @@
 # Sources: Define where notifications come from
 sources:
   # PostgreSQL/pgSTAC source for database changes
-  - type: postgres
+  - type: pgstac
     config:
       host: localhost
       port: 5432
@@ -36,7 +36,7 @@ outputs:
 
 # Example with multiple sources and outputs
 # sources:
-#   - type: postgres
+#   - type: pgstac
 #     config:
 #       host: db1.example.com
 #       port: 5432
@@ -44,7 +44,7 @@ outputs:
 #       username: notifier
 #       password: secret123
 #
-#   - type: postgres
+#   - type: pgstac
 #     config:
 #       host: db2.example.com
 #       port: 5432

@@ -51,7 +51,7 @@ Create a YAML configuration file to specify sources (where messages come from) a
 ```yaml
 # Sources: Define where notifications come from
 sources:
-  - type: postgres
+  - type: pgstac
     config:
       host: localhost
       port: 5432
@@ -72,7 +72,7 @@ See [examples/config.yaml](./examples/config.yaml) for a complete configuration 
 ### Available Plugins
 
 #### Sources
-- `postgres`: Monitor PostgreSQL/pgSTAC database changes
+- `pgstac`: Monitor PostgreSQL/pgSTAC database changes
 
 #### Outputs
 - `mqtt`: Publish events to MQTT broker

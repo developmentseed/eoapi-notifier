@@ -117,7 +117,7 @@ class SourceRegistry(ComponentRegistry[BaseSource[Any]]):
     def _register_builtin_sources(self) -> None:
         """Register built-in source types."""
         self.register(
-            name="postgres",
+            name="pgstac",
             module_path="eoapi_notifier.sources.pgstac",
             class_name="PgSTACSource",
             config_class_name="PgSTACSourceConfig",

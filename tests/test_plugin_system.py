@@ -462,7 +462,7 @@ class TestRegistryIntegration:
     @pytest.mark.parametrize(
         "registry,plugin_type",
         [
-            (source_registry, "postgres"),
+            (source_registry, "pgstac"),
             (output_registry, "mqtt"),
         ],
     )

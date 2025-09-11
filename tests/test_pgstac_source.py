@@ -142,10 +142,10 @@ class TestPgSTACSourceConfig:
 class TestPgSTACSourceRegistry:
     """Test pgSTAC source registry integration."""
 
-    def test_postgres_source_registered(self) -> None:
-        """Test that postgres source is registered."""
+    def test_pgstac_source_registered(self) -> None:
+        """Test that pgstac source is registered."""
         available = get_available_sources()
-        assert "postgres" in available
+        assert "pgstac" in available
 
     def test_create_source_from_registry(self) -> None:
         """Test creating pgSTAC source through registry."""
@@ -157,7 +157,7 @@ class TestPgSTACSourceRegistry:
             "password": "test",
         }
 
-        source = create_source("postgres", config)
+        source = create_source("pgstac", config)
 
         assert isinstance(source, PgSTACSource)
         assert isinstance(source.config, PgSTACSourceConfig)
@@ -171,7 +171,7 @@ class TestPgSTACSourceRegistry:
         }
 
         with pytest.raises(PluginError):  # Should raise validation error
-            create_source("postgres", config)
+            create_source("pgstac", config)
 
 
 class TestPgSTACSource:

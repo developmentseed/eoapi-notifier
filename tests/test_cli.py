@@ -103,7 +103,7 @@ class TestCLI:
         """Test successful CLI run with valid configuration."""
         # Create test config file
         config_data = {
-            "sources": [{"type": "postgres", "config": {"host": "localhost"}}],
+            "sources": [{"type": "pgstac", "config": {"host": "localhost"}}],
             "outputs": [{"type": "mqtt", "config": {"broker_host": "localhost"}}],
         }
 

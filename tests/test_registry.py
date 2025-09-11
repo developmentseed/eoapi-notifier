@@ -239,7 +239,7 @@ class TestBuiltinRegistries:
         """Test source registry has built-in sources."""
         assert isinstance(source_registry, SourceRegistry)
         available = source_registry.list_registered()
-        assert "postgres" in available
+        assert "pgstac" in available
 
     def test_output_registry_initialization(self) -> None:
         """Test output registry has built-in outputs."""
@@ -279,7 +279,7 @@ class TestBuiltinRegistries:
         """Test getting available source types."""
         sources = get_available_sources()
         assert isinstance(sources, list)
-        assert "postgres" in sources
+        assert "pgstac" in sources
 
     def test_get_available_outputs(self) -> None:
         """Test getting available output types."""

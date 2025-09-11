@@ -49,7 +49,7 @@ class TestNotifierApp:
     def test_load_config_valid_yaml(self) -> None:
         """Test loading valid YAML configuration."""
         config_data = {
-            "sources": [{"type": "postgres", "config": {"host": "localhost"}}],
+            "sources": [{"type": "pgstac", "config": {"host": "localhost"}}],
             "outputs": [{"type": "mqtt", "config": {"broker_host": "localhost"}}],
         }
 
@@ -124,7 +124,7 @@ class TestNotifierApp:
         mock_create_output.return_value = mock_output
 
         config = {
-            "sources": [{"type": "postgres", "config": {"host": "localhost"}}],
+            "sources": [{"type": "pgstac", "config": {"host": "localhost"}}],
             "outputs": [{"type": "mqtt", "config": {"broker_host": "localhost"}}],
         }
 
@@ -135,7 +135,7 @@ class TestNotifierApp:
         assert self.app.sources[0] == mock_source
         assert self.app.outputs[0] == mock_output
 
-        mock_create_source.assert_called_once_with("postgres", {"host": "localhost"})
+        mock_create_source.assert_called_once_with("pgstac", {"host": "localhost"})
         mock_create_output.assert_called_once_with("mqtt", {"broker_host": "localhost"})
 
     @patch("eoapi_notifier.core.main.create_source")
@@ -173,7 +173,7 @@ class TestNotifierApp:
         """Test handling of source creation errors."""
         mock_create_source.side_effect = Exception("Creation failed")
 
-        config = {"sources": [{"type": "postgres", "config": {"host": "localhost"}}]}
+        config = {"sources": [{"type": "pgstac", "config": {"host": "localhost"}}]}
 
         self.app.create_plugins(config)
 
