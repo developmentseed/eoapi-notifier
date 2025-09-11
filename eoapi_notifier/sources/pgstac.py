@@ -2,48 +2,385 @@
 pgSTAC source plugin.
 
 Connects to pgSTAC and listens for item change notifications using
-LISTEN/NOTIFY.
+LISTEN/NOTIFY. It includes optional operation correlation to transform
+pgSTAC's DELETE+INSERT pairs into semantic UPDATE events.
 """
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+import logging
+from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 import asyncpg
-from pydantic import ConfigDict, field_validator
+from pydantic import ConfigDict, Field, field_validator
 
 from ..core.event import NotificationEvent
 from ..core.plugin import BasePluginConfig, BaseSource, PluginMetadata
 
+# Constants
+DEFAULT_CORRELATION_WINDOW = 5.0
+DEFAULT_CLEANUP_INTERVAL = 1.0
+DEFAULT_EVENT_QUEUE_SIZE = 1000
+MIN_CORRELATION_WINDOW = 0.1
+MAX_CORRELATION_WINDOW = 300.0
+MIN_CLEANUP_INTERVAL = 0.1
+MAX_CLEANUP_INTERVAL = 60.0
+
+
+@dataclass
+class PendingOperation:
+    """Represents an operation waiting for potential correlation."""
+
+    event: NotificationEvent
+    timestamp: datetime
+    collection: str
+    item_id: str
+
+
+class OperationCorrelator:
+    """
+    Correlates pgSTAC operations to provide semantic event interpretation.
+
+    Transforms raw pgSTAC DELETE+INSERT pairs into meaningful UPDATE operations
+    by maintaining a sliding correlation window.
+    """
+
+    def __init__(
+        self,
+        correlation_window: float = DEFAULT_CORRELATION_WINDOW,
+        cleanup_interval: float = DEFAULT_CLEANUP_INTERVAL,
+        expired_callback: Callable[[NotificationEvent], Any] | None = None,
+    ):
+        """
+        Initialize the operation correlator.
+
+        Args:
+            correlation_window: Time window in seconds to correlate operations
+            cleanup_interval: How often to clean up expired operations in seconds
+            expired_callback: Optional callback for expired DELETE operations
+        """
+        self.correlation_window = correlation_window
+        self.cleanup_interval = cleanup_interval
+        self.expired_callback = expired_callback
+        self._pending_operations: dict[tuple[str, str], PendingOperation] = {}
+        self._cleanup_task: asyncio.Task[None] | None = None
+        self._running = False
+        self.logger = logging.getLogger(__name__)
+
+    # Lifecycle Methods
+
+    async def start(self) -> None:
+        """Start the correlator and begin cleanup task."""
+        if self._running:
+            return
+
+        self._running = True
+        self._cleanup_task = asyncio.create_task(self._run_cleanup_loop())
+        self.logger.info(
+            "Started operation correlator (window=%ss, cleanup=%ss)",
+            self.correlation_window,
+            self.cleanup_interval,
+        )
+
+    async def stop(self) -> None:
+        """Stop the correlator and cleanup resources."""
+        if not self._running:
+            return
+
+        self._running = False
+        await self._cancel_cleanup_task()
+        await self._process_remaining_operations()
+        self.logger.info("Stopped operation correlator")
+
+    # Event Processing Methods
+
+    async def process_events(
+        self, event_stream: AsyncIterator[NotificationEvent]
+    ) -> AsyncIterator[NotificationEvent]:
+        """
+        Process a stream of events and yield correlated semantic events.
+
+        Args:
+            event_stream: Input stream of raw pgSTAC events
+
+        Yields:
+            NotificationEvent objects with semantic operations:
+            - item_created (INSERT with no prior DELETE)
+            - item_updated (INSERT matching a prior DELETE)
+            - item_deleted (DELETE with no subsequent INSERT)
+        """
+        if not self._running:
+            await self.start()
+
+        async for event in event_stream:
+            async for correlated_event in self._process_single_event(event):
+                yield correlated_event
+
+    async def _process_single_event(
+        self, event: NotificationEvent
+    ) -> AsyncIterator[NotificationEvent]:
+        """Process a single event and yield any resulting correlated events."""
+        operation = event.operation.upper()
+
+        if not event.item_id:
+            self.logger.warning(
+                "Event missing item_id, skipping correlation: %s", event
+            )
+            return
+
+        correlation_key = (event.collection, event.item_id)
+
+        if operation == "DELETE":
+            await self._handle_delete_operation(event, correlation_key)
+        elif operation == "INSERT":
+            async for result_event in self._handle_insert_operation(
+                event, correlation_key
+            ):
+                yield result_event
+        elif operation == "UPDATE":
+            yield self._create_semantic_event(event, "item_updated")
+        else:
+            # Pass through unknown operations unchanged
+            yield event
+
+    # Operation Handler Methods
+
+    async def _handle_delete_operation(
+        self, event: NotificationEvent, key: tuple[str, str]
+    ) -> None:
+        """Store DELETE operation for potential correlation with future INSERT."""
+        collection, item_id = key
+
+        pending = PendingOperation(
+            event=event,
+            timestamp=event.timestamp,
+            collection=collection,
+            item_id=item_id,
+        )
+
+        self._pending_operations[key] = pending
+        self.logger.debug("Stored DELETE for correlation: %s/%s", collection, item_id)
+
+    async def _handle_insert_operation(
+        self, event: NotificationEvent, key: tuple[str, str]
+    ) -> AsyncIterator[NotificationEvent]:
+        """Handle INSERT operation by checking for correlation with prior DELETE."""
+        collection, item_id = key
+        pending_operation = self._pending_operations.pop(key, None)
+
+        if pending_operation:
+            # This is a correlated UPDATE operation
+            time_diff = (event.timestamp - pending_operation.timestamp).total_seconds()
+
+            self.logger.debug(
+                "Correlated DELETE+INSERT as UPDATE: %s/%s (%.2fs apart)",
+                collection,
+                item_id,
+                time_diff,
+            )
+
+            yield self._create_update_event(event, pending_operation, time_diff)
+        else:
+            # This is a genuine CREATE operation
+            self.logger.debug("Real INSERT (creation): %s/%s", collection, item_id)
+            yield self._create_semantic_event(event, "item_created")
+
+    # Event Creation Methods
+
+    def _create_semantic_event(
+        self, event: NotificationEvent, operation: str
+    ) -> NotificationEvent:
+        """Create a semantic event with the specified operation."""
+        semantic_event = event.model_copy()
+        semantic_event.operation = operation
+        return semantic_event
+
+    def _create_update_event(
+        self,
+        insert_event: NotificationEvent,
+        delete_operation: PendingOperation,
+        time_diff: float,
+    ) -> NotificationEvent:
+        """Create an UPDATE event with correlation metadata."""
+        update_event = insert_event.model_copy()
+        update_event.operation = "item_updated"
+
+        # Add correlation metadata
+        update_event.data = {
+            **insert_event.data,
+            "correlation": {
+                "delete_timestamp": delete_operation.timestamp.isoformat(),
+                "insert_timestamp": insert_event.timestamp.isoformat(),
+                "correlation_time_seconds": time_diff,
+            },
+        }
+
+        return update_event
+
+    # Cleanup Methods
+
+    async def _run_cleanup_loop(self) -> None:
+        """Background task to clean up expired operations."""
+        while self._running:
+            try:
+                await asyncio.sleep(self.cleanup_interval)
+                if self._running:  # Check again after sleep
+                    await self._cleanup_expired_operations()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.error("Error in cleanup loop: %s", e)
+
+    async def _cleanup_expired_operations(self) -> None:
+        """Process and emit events for expired DELETE operations."""
+        now = datetime.now(UTC)
+        expired_keys = self._find_expired_operations(now)
+
+        if not expired_keys:
+            return
+
+        for key in expired_keys:
+            if key in self._pending_operations:
+                pending = self._pending_operations.pop(key)
+                await self._handle_expired_operation(pending)
+
+        self.logger.debug("Processed %d expired operations", len(expired_keys))
+
+    def _find_expired_operations(self, current_time: datetime) -> list[tuple[str, str]]:
+        """Find operations that have exceeded the correlation window."""
+        expired_keys = []
+
+        for key, pending in self._pending_operations.items():
+            age = (current_time - pending.timestamp).total_seconds()
+            if age >= self.correlation_window:
+                expired_keys.append(key)
+
+        return expired_keys
+
+    async def _handle_expired_operation(self, pending: PendingOperation) -> None:
+        """Handle an expired DELETE operation by treating it as a real deletion."""
+        self.logger.debug(
+            "DELETE expired, treating as real deletion: %s/%s",
+            pending.collection,
+            pending.item_id,
+        )
+
+        deleted_event = self._create_semantic_event(pending.event, "item_deleted")
+
+        if self.expired_callback:
+            await self._invoke_expired_callback(deleted_event)
+
+    async def _invoke_expired_callback(self, event: NotificationEvent) -> None:
+        """Safely invoke the expired callback."""
+        if self.expired_callback is None:
+            return
+
+        try:
+            if asyncio.iscoroutinefunction(self.expired_callback):
+                await self.expired_callback(event)
+            else:
+                self.expired_callback(event)
+        except Exception as e:
+            self.logger.error("Error in expired callback: %s", e)
+
+    # Lifecycle Helper Methods
+
+    async def _cancel_cleanup_task(self) -> None:
+        """Cancel the cleanup task if it's running."""
+        if self._cleanup_task and not self._cleanup_task.done():
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+
+    async def _process_remaining_operations(self) -> None:
+        """Process any remaining operations on shutdown."""
+        remaining_operations = list(self._pending_operations.values())
+        self._pending_operations.clear()
+
+        for pending in remaining_operations:
+            self.logger.debug(
+                "Processing remaining operation on shutdown: %s/%s",
+                pending.collection,
+                pending.item_id,
+            )
+
+    # Status and Monitoring Methods
+
+    def get_pending_count(self) -> int:
+        """Get the number of pending operations."""
+        return len(self._pending_operations)
+
+    def get_oldest_pending_age(self) -> float | None:
+        """Get the age in seconds of the oldest pending operation."""
+        if not self._pending_operations:
+            return None
+
+        now = datetime.now(UTC)
+        oldest = min(op.timestamp for op in self._pending_operations.values())
+        return (now - oldest).total_seconds()
+
+    def get_status(self) -> dict[str, Any]:
+        """Get correlator status information."""
+        return {
+            "running": self._running,
+            "correlation_window": self.correlation_window,
+            "cleanup_interval": self.cleanup_interval,
+            "pending_operations": self.get_pending_count(),
+            "oldest_pending_age": self.get_oldest_pending_age(),
+        }
+
 
 class PgSTACSourceConfig(BasePluginConfig):
-    """Configuration for pgSTAC notification source."""
+    """Configuration for pgSTAC notification source with correlation capabilities."""
 
     model_config = ConfigDict(extra="forbid")
 
-    # Connection parameters
     host: str = "localhost"
     port: int = 5432
     database: str = "pgstac"
     user: str = "postgres"
     password: str = ""
 
-    # LISTEN/NOTIFY settings
     channel: str = "pgstac_items"
-    queue_size: int = 1000
-    listen_timeout: float = 1.0
+    tables: list[str] | None = None
 
-    # Reconnection settings
     max_reconnect_attempts: int = -1  # -1 for infinite
     reconnect_delay: float = 5.0
-    reconnect_backoff_factor: float = 2.0
-    max_reconnect_delay: float = 60.0
+    listen_timeout: float = 5.0
 
-    # Event configuration
     event_source: str = "/eoapi/stac/pgstac"
     event_type: str = "org.eoapi.stac.item"
+
+    enable_correlation: bool = Field(
+        default=True,
+        description="Enable DELETE+INSERT correlation for UPDATE semantics",
+    )
+
+    correlation_window: float = Field(
+        default=DEFAULT_CORRELATION_WINDOW,
+        description="Time window in seconds to correlate operations",
+        gt=MIN_CORRELATION_WINDOW,
+        le=MAX_CORRELATION_WINDOW,
+    )
+
+    cleanup_interval: float = Field(
+        default=DEFAULT_CLEANUP_INTERVAL,
+        description="How often to check for expired operations in seconds",
+        gt=MIN_CLEANUP_INTERVAL,
+        le=MAX_CLEANUP_INTERVAL,
+    )
+
+    event_queue_size: int = Field(
+        default=DEFAULT_EVENT_QUEUE_SIZE,
+        description="Maximum size of internal event queue",
+        gt=0,
+        le=10000,
+    )
 
     @field_validator("port")
     @classmethod
@@ -64,6 +401,10 @@ class PgSTACSourceConfig(BasePluginConfig):
             "channel": "pgstac_items",
             "max_reconnect_attempts": -1,
             "reconnect_delay": 5.0,
+            "enable_correlation": True,
+            "correlation_window": DEFAULT_CORRELATION_WINDOW,
+            "cleanup_interval": DEFAULT_CLEANUP_INTERVAL,
+            "event_queue_size": DEFAULT_EVENT_QUEUE_SIZE,
         }
 
     @classmethod
@@ -71,10 +412,17 @@ class PgSTACSourceConfig(BasePluginConfig):
         """Get structured metadata for this source type."""
         return PluginMetadata(
             name="pgstac",
-            description="Resilient pgSTAC LISTEN/NOTIFY source with auto-reconnection",
-            version="2.0.0",
+            description="pgSTAC LISTEN/NOTIFY source",
+            version="0.0.2",
             category="database",
-            tags=["postgresql", "pgstac", "stac", "listen-notify", "resilient"],
+            tags=[
+                "postgresql",
+                "pgstac",
+                "stac",
+                "listen-notify",
+                "correlation",
+                "resilient",
+            ],
             priority=10,
         )
 
@@ -84,205 +432,292 @@ class PgSTACSourceConfig(BasePluginConfig):
 
     def get_status_info(self) -> dict[str, Any]:
         """Get status information for display."""
-        return {
+        status = {
             "Host": f"{self.host}:{self.port}",
             "Database": self.database,
             "Channel": self.channel,
+            "Correlation Enabled": self.enable_correlation,
         }
+
+        if self.enable_correlation:
+            status.update(
+                {
+                    "Correlation Window": f"{self.correlation_window}s",
+                    "Cleanup Interval": f"{self.cleanup_interval}s",
+                }
+            )
+
+        return status
 
 
 class PgSTACSource(BaseSource):
     """
-    Resilient pgSTAC source for notifications with auto-reconnection.
+        pgSTAC source for notifications with auto-reconnection.
+    d
     """
 
     def __init__(self, config: PgSTACSourceConfig):
         """Initialize pgSTAC source."""
         super().__init__(config)
+
+        # Database connection state
         self._connection: asyncpg.Connection | None = None
         self._notification_queue: asyncio.Queue | None = None
         self._reconnect_attempts: int = 0
         self._current_delay: float = config.reconnect_delay
         self._connected: bool = False
 
+        # Event processing
+        self._event_queue: asyncio.Queue[NotificationEvent] = asyncio.Queue(
+            maxsize=config.event_queue_size
+        )
+        self._processing_task: asyncio.Task[None] | None = None
+
+        # Operation correlation (optional)
+        self._correlator: OperationCorrelator | None = None
+        if config.enable_correlation:
+            self._correlator = OperationCorrelator(
+                correlation_window=config.correlation_window,
+                cleanup_interval=config.cleanup_interval,
+                expired_callback=self._handle_expired_delete,
+            )
+
     async def start(self) -> None:
         """Start pgSTAC connection and setup listener."""
-        self.logger.info(f"Starting pgSTAC source: {self.config.get_connection_info()}")
+        if self.is_running:
+            return
 
-        self._notification_queue = asyncio.Queue(maxsize=self.config.queue_size)
-        await self._connect()
-        await super().start()
+        correlation_mode = "with correlation" if self._correlator else "raw events only"
+        self.logger.info(
+            "Starting pgSTAC source (%s): %s",
+            correlation_mode,
+            self.config.get_connection_info(),
+        )
+
+        await self._establish_connection()
+        await self._setup_listener()
+        await self._start_correlator()
+        self._start_event_processing()
+
+        self._set_running_state(True)
 
     async def stop(self) -> None:
-        """Stop pgSTAC connection and cleanup."""
-        await self._disconnect()
-        self._notification_queue = None
-        await super().stop()
-        self.logger.info("pgSTAC source stopped")
+        """Stop pgSTAC source and cleanup resources."""
+        if not self.is_running:
+            return
+
+        self.logger.info("Stopping pgSTAC source")
+        self._set_running_state(False)
+
+        await self._stop_event_processing()
+        await self._stop_correlator()
+        await self._cleanup_connection()
 
     async def listen(self) -> AsyncIterator[NotificationEvent]:
-        """Listen for pgSTAC notifications with automatic reconnection."""
-        if not self._notification_queue:
-            raise RuntimeError("pgSTAC source not started")
+        """Listen for notification events from pgSTAC."""
+        if not self.is_running:
+            raise RuntimeError("Source must be started before listening")
 
-        while self._running:
+        if self._correlator:
+            async for event in self._correlator.process_events(
+                self._raw_event_stream()
+            ):
+                yield event
+        else:
+            async for event in self._raw_event_stream():
+                yield event
+
+    async def _establish_connection(self) -> None:
+        """Establish database connection with retry logic."""
+        while True:
             try:
-                # Ensure we're connected
-                if not self._connected:
-                    await self._reconnect_if_needed()
-                    if not self._connected:
-                        await asyncio.sleep(1.0)
-                        continue
+                self._connection = await asyncpg.connect(
+                    host=self.config.host,
+                    port=self.config.port,
+                    database=self.config.database,
+                    user=self.config.user,
+                    password=self.config.password,
+                )
 
-                # Wait for notification
-                payload = await asyncio.wait_for(
+                self._connected = True
+                self._reconnect_attempts = 0
+                self._current_delay = self.config.reconnect_delay
+
+                self.logger.info("Connected to pgSTAC database")
+                break
+
+            except Exception as e:
+                await self._handle_connection_error(e)
+
+    async def _handle_connection_error(self, error: Exception) -> None:
+        """Handle connection errors with exponential backoff."""
+        self._reconnect_attempts += 1
+
+        if (
+            self.config.max_reconnect_attempts > 0
+            and self._reconnect_attempts > self.config.max_reconnect_attempts
+        ):
+            raise RuntimeError(
+                f"Max reconnection attempts exceeded: {error}"
+            ) from error
+
+        self.logger.warning(
+            "Connection failed (attempt %d): %s. Retrying in %.1fs",
+            self._reconnect_attempts,
+            error,
+            self._current_delay,
+        )
+
+        await asyncio.sleep(self._current_delay)
+        self._current_delay = min(
+            self._current_delay * 1.5, 60.0
+        )  # Exponential backoff
+
+    async def _setup_listener(self) -> None:
+        """Setup PostgreSQL LISTEN for notifications."""
+        if not self._connection:
+            raise RuntimeError("No database connection available")
+
+        await self._connection.execute(f"LISTEN {self.config.channel}")
+        self._notification_queue = asyncio.Queue()
+        await self._connection.add_listener(
+            self.config.channel, self._handle_notification
+        )
+
+        self.logger.info("Listening on channel: %s", self.config.channel)
+
+    async def _cleanup_connection(self) -> None:
+        """Clean up database connection and listener."""
+        if self._connection:
+            try:
+                if not self._connection.is_closed():
+                    await self._connection.remove_listener(
+                        self.config.channel, self._handle_notification
+                    )
+                    await self._connection.execute(f"UNLISTEN {self.config.channel}")
+                    await self._connection.close()
+            except Exception as e:
+                self.logger.warning("Error during connection cleanup: %s", e)
+            finally:
+                self._connection = None
+                self._connected = False
+
+    def _start_event_processing(self) -> None:
+        """Start the background event processing task."""
+        self._processing_task = asyncio.create_task(self._process_notifications())
+
+    async def _stop_event_processing(self) -> None:
+        """Stop the event processing task."""
+        if self._processing_task and not self._processing_task.done():
+            self._processing_task.cancel()
+            try:
+                await self._processing_task
+            except asyncio.CancelledError:
+                pass
+
+    async def _process_notifications(self) -> None:
+        """Background task to process incoming notifications."""
+        while self.is_running:
+            try:
+                if not self._notification_queue:
+                    await asyncio.sleep(0.1)
+                    continue
+
+                notification = await asyncio.wait_for(
                     self._notification_queue.get(),
                     timeout=self.config.listen_timeout,
                 )
 
-                if payload:
-                    event = self._process_notification_payload(payload)
-                    if event:
-                        yield event
+                event = self._create_notification_event(notification)
+                if event:
+                    await self._event_queue.put(event)
 
             except TimeoutError:
-                continue
+                continue  # Normal timeout, keep listening
+            except asyncio.CancelledError:
+                break
             except Exception as e:
-                self.logger.error(f"Error in listen loop: {e}")
-                self._connected = False
-                await asyncio.sleep(1.0)
+                self.logger.error("Error processing notification: %s", e)
 
-    async def _connect(self) -> bool:
-        """Establish connection to PostgreSQL."""
-        try:
-            self.logger.info("Connecting to PostgreSQL...")
-
-            self._connection = await asyncpg.connect(
-                host=self.config.host,
-                port=self.config.port,
-                database=self.config.database,
-                user=self.config.user,
-                password=self.config.password,
-            )
-
-            # Setup listener
-            if self._connection is None:
-                raise RuntimeError("Connection is None after successful connect")
-            await self._connection.execute(f"LISTEN {self.config.channel}")
-            await self._connection.add_listener(
-                self.config.channel, self._notification_callback
-            )
-
-            self._connected = True
-            self._reconnect_attempts = 0
-            self._current_delay = self.config.reconnect_delay
-
-            self.logger.info(
-                f"Connected and listening to channel: {self.config.channel}"
-            )
-            return True
-
-        except Exception as e:
-            self.logger.error(f"Failed to connect: {e}")
-            self._connected = False
-            await self._disconnect()
-            return False
-
-    async def _disconnect(self) -> None:
-        """Close PostgreSQL connection safely."""
-        self._connected = False
-        if self._connection:
-            try:
-                await self._connection.remove_listener(
-                    self.config.channel, self._notification_callback
-                )
-                await self._connection.execute(f"UNLISTEN {self.config.channel}")
-                await self._connection.close()
-            except Exception as e:
-                self.logger.warning(f"Error during disconnect: {e}")
-            finally:
-                self._connection = None
-
-    async def _reconnect_if_needed(self) -> None:
-        """Attempt reconnection with exponential backoff."""
-        if not self._should_reconnect():
-            return
-
-        self.logger.info(
-            f"Reconnecting in {self._current_delay:.1f}s "
-            f"(attempt {self._reconnect_attempts + 1})"
-        )
-        await asyncio.sleep(self._current_delay)
-
-        self._reconnect_attempts += 1
-
-        if await self._connect():
-            self.logger.info("Reconnection successful")
-        else:
-            # Exponential backoff
-            self._current_delay = min(
-                self._current_delay * self.config.reconnect_backoff_factor,
-                self.config.max_reconnect_delay,
-            )
-
-    def _should_reconnect(self) -> bool:
-        """Check if we should attempt to reconnect."""
-        if not self._running:
-            return False
-
-        if self.config.max_reconnect_attempts == -1:
-            return True
-
-        return bool(self._reconnect_attempts < self.config.max_reconnect_attempts)
-
-    def _notification_callback(
-        self, connection: Any, pid: int, channel: str, payload: str
+    def _handle_notification(
+        self, connection: asyncpg.Connection, pid: int, channel: str, payload: str
     ) -> None:
-        """Callback for asyncpg notifications."""
+        """Handle incoming PostgreSQL notification."""
         if self._notification_queue:
             try:
                 self._notification_queue.put_nowait(payload)
             except asyncio.QueueFull:
                 self.logger.warning("Notification queue full, dropping notification")
 
-    def _from_pgstac_notification(self, payload: dict[str, Any]) -> NotificationEvent:
-        """Create NotificationEvent from pgSTAC LISTEN/NOTIFY payload."""
-        operation = payload.get("operation") or payload.get("event", "INSERT")
-        collection = payload.get("collection", "unknown")
-        item_id = payload.get("item_id") or payload.get("id")
-
-        # Handle timestamp parsing
-        timestamp = payload.get("timestamp") or payload.get("datetime")
-        if timestamp and isinstance(timestamp, str):
-            try:
-                timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-            except ValueError:
-                timestamp = datetime.now(UTC)
-        elif not timestamp:
-            timestamp = datetime.now(UTC)
-
-        return NotificationEvent(
-            source=self.config.event_source,
-            type=self.config.event_type,
-            operation=operation,
-            collection=collection,
-            item_id=item_id,
-            timestamp=timestamp,
-            data=payload,
-        )
-
-    def _process_notification_payload(self, payload: str) -> NotificationEvent | None:
-        """Process a pgSTAC notification payload into a NotificationEvent."""
+    def _create_notification_event(self, payload: str) -> NotificationEvent | None:
+        """Create NotificationEvent from PostgreSQL notification payload."""
         try:
-            payload_data = json.loads(payload)
-            event = self._from_pgstac_notification(payload_data)
-            self.logger.debug(
-                f"Processed: {event.operation} on {event.collection}/{event.item_id}"
+            data = json.loads(payload)
+
+            return NotificationEvent(
+                id=f"pgstac-{data.get('id', 'unknown')}",
+                source=self.config.event_source,
+                type=self.config.event_type,
+                operation=data.get("op", "unknown"),
+                collection=data.get("collection", "unknown"),
+                item_id=data.get("id"),
+                timestamp=datetime.now(UTC),
+                data=data,
             )
-            return event
-        except json.JSONDecodeError as e:
-            self.logger.error(f"Failed to parse notification payload: {e}")
+        except (json.JSONDecodeError, KeyError) as e:
+            self.logger.warning("Invalid notification payload: %s", e)
             return None
-        except Exception as e:
-            self.logger.error(f"Error processing notification: {e}")
-            return None
+
+    async def _raw_event_stream(self) -> AsyncIterator[NotificationEvent]:
+        """Generate raw event stream from the event queue."""
+        while self.is_running:
+            try:
+                event = await asyncio.wait_for(self._event_queue.get(), timeout=1.0)
+                yield event
+            except TimeoutError:
+                continue
+            except Exception as e:
+                self.logger.error("Error in raw event stream: %s", e)
+                break
+
+    # Correlator Management Methods
+
+    async def _start_correlator(self) -> None:
+        """Start the operation correlator if enabled."""
+        if self._correlator:
+            await self._correlator.start()
+
+    async def _stop_correlator(self) -> None:
+        """Stop the operation correlator if enabled."""
+        if self._correlator:
+            await self._correlator.stop()
+
+    async def _handle_expired_delete(self, event: NotificationEvent) -> None:
+        """Handle expired DELETE operations from the correlator."""
+        self.logger.debug(
+            "Handling expired DELETE: %s/%s", event.collection, event.item_id
+        )
+        # In this implementation, expired deletes are handled by the correlator
+        # This callback could be used to emit the event to external systems
+
+    # State Management Methods
+
+    def _set_running_state(self, running: bool) -> None:
+        """Set the running state consistently."""
+        self._running = running
+        self._started = running
+
+    # Status Methods
+
+    def get_status(self) -> dict[str, Any]:
+        """Get comprehensive source status."""
+        status = {
+            "connected": self._connected,
+            "reconnect_attempts": self._reconnect_attempts,
+            "event_queue_size": self._event_queue.qsize(),
+        }
+
+        if self._correlator:
+            status["correlator"] = self._correlator.get_status()  # type: ignore[assignment]
+
+        return status

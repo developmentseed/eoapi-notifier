@@ -11,11 +11,18 @@ sources:
       database: postgis
       username: username
       password: password
+
       # Optional: specific table patterns to monitor
       # tables: ["items", "collections"]
       # Optional: connection pool settings
       # min_connections: 1
       # max_connections: 10
+
+      # Operation Correlation Settings
+      # Correlation transforms pgSTAC DELETE+INSERT pairs into semantic UPDATE events
+      # enable_correlation: true       # Enable DELETE+INSERT correlation (default: true)
+      # correlation_window: 5.0        # Time window to correlate operations in seconds
+      # cleanup_interval: 1.0          # How often to check for expired operations in seconds
 
 # Outputs: Define where notifications are sent
 outputs:

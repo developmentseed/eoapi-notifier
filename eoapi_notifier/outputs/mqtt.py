@@ -81,7 +81,7 @@ class MQTTConfig(BasePluginConfig):
         return PluginMetadata(
             name="mqtt",
             description="MQTT broker output adapter for notification events",
-            version="2.0.0",
+            version="0.0.2",
             category="messaging",
             tags=["mqtt", "messaging", "broker", "publish"],
             priority=10,
