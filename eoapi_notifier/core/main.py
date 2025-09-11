@@ -51,51 +51,87 @@ class NotifierApp:
         """Create source and output plugins from configuration."""
         # Create sources
         sources_config = config.get("sources", [])
-        for source_config in sources_config:
+        for i, source_config in enumerate(sources_config):
             source_type = source_config.get("type")
+            source_config_data = source_config.get("config", {})
             if not source_type:
-                logger.error("Source configuration missing 'type' field")
+                logger.error(
+                    f"Source configuration {i} missing 'type' field: {source_config}"
+                )
                 continue
 
             try:
-                source = create_source(source_type, source_config.get("config", {}))
+                source = create_source(source_type, source_config_data)
                 self.sources.append(source)
                 logger.info(f"Created source: {source_type}")
             except Exception as e:
                 logger.error(f"Failed to create source {source_type}: {e}")
+                logger.debug(
+                    f"Source creation error details - type: {source_type}, "
+                    f"config: {source_config_data}",
+                    exc_info=True,
+                )
 
         # Create outputs
         outputs_config = config.get("outputs", [])
-        for output_config in outputs_config:
+        for i, output_config in enumerate(outputs_config):
             output_type = output_config.get("type")
+            output_config_data = output_config.get("config", {})
             if not output_type:
-                logger.error("Output configuration missing 'type' field")
+                logger.error(
+                    f"Output configuration {i} missing 'type' field: {output_config}"
+                )
                 continue
 
             try:
-                output = create_output(output_type, output_config.get("config", {}))
+                output = create_output(output_type, output_config_data)
                 self.outputs.append(output)
                 logger.info(f"Created output: {output_type}")
             except Exception as e:
                 logger.error(f"Failed to create output {output_type}: {e}")
+                logger.debug(
+                    f"Output creation error details - type: {output_type}, "
+                    f"config: {output_config_data}",
+                    exc_info=True,
+                )
 
     async def start_plugins(self) -> None:
         """Start all plugins."""
+        logger.info(
+            f"Starting {len(self.sources)} sources and {len(self.outputs)} outputs"
+        )
+
         # Start sources
-        for source in self.sources:
+        for i, source in enumerate(self.sources):
+            source_name = source.__class__.__name__
             try:
+                logger.debug(
+                    f"Starting source {i + 1}/{len(self.sources)}: {source_name}"
+                )
                 await source.start()
-                logger.info(f"Started source: {source.__class__.__name__}")
+                logger.debug(f"✓ Successfully started source: {source_name}")
             except Exception as e:
-                logger.error(f"Failed to start source {source.__class__.__name__}: {e}")
+                logger.error(
+                    f"✗ Failed to start source {source_name}: {e}", exc_info=True
+                )
+                logger.info(f"Source {source_name} will retry connection in background")
 
         # Start outputs
-        for output in self.outputs:
+        for i, output in enumerate(self.outputs):
+            output_name = output.__class__.__name__
             try:
+                logger.debug(
+                    f"Starting output {i + 1}/{len(self.outputs)}: {output_name}"
+                )
                 await output.start()
-                logger.info(f"Started output: {output.__class__.__name__}")
+                logger.debug(f"✓ Successfully started output: {output_name}")
             except Exception as e:
-                logger.error(f"Failed to start output {output.__class__.__name__}: {e}")
+                logger.error(
+                    f"✗ Failed to start output {output_name}: {e}", exc_info=True
+                )
+                logger.info(f"Output {output_name} will retry connection in background")
+
+        logger.info("All plugins started successfully")
 
     async def stop_plugins(self) -> None:
         """Stop all plugins."""
@@ -125,59 +161,108 @@ class NotifierApp:
             logger.warning("No outputs configured")
             return
 
-        logger.info("Starting event processing...")
+        logger.info(
+            f"Starting event processing with {len(self.sources)} sources "
+            f"and {len(self.outputs)} outputs..."
+        )
         self._running = True
 
         # Create event processing tasks
         tasks = []
-        for source in self.sources:
+        for i, source in enumerate(self.sources):
+            source_name = source.__class__.__name__
+            logger.debug(
+                f"Creating processing task {i + 1}/{len(self.sources)} "
+                f"for source: {source_name}"
+            )
             task = asyncio.create_task(self._process_source_events(source))
             tasks.append(task)
 
+        logger.debug(
+            f"Created {len(tasks)} event processing tasks, starting event loop..."
+        )
+
         # Wait for shutdown or task completion
         try:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            logger.info(f"Event processing tasks completed with results: {results}")
         except asyncio.CancelledError:
             logger.info("Event processing cancelled")
+        except Exception as e:
+            logger.error(f"Unexpected error in event processing: {e}", exc_info=True)
         finally:
             self._running = False
+            logger.info("Event processing loop stopped")
 
     async def _process_source_events(self, source: Any) -> None:
         """Process events from a single source."""
         source_name = source.__class__.__name__
         logger.debug(f"Starting event processing for source: {source_name}")
 
+        event_count = 0
+        last_heartbeat = asyncio.get_event_loop().time()
+        heartbeat_interval = 30.0  # Log heartbeat every 30 seconds
+
         try:
+            logger.debug(f"Calling source.listen() for {source_name}...")
+
             async for event in source.listen():
+                event_count += 1
+                current_time = asyncio.get_event_loop().time()
+
+                # Periodic heartbeat to show we're alive
+                if current_time - last_heartbeat > heartbeat_interval:
+                    logger.info(
+                        f"Event processing: {source_name} processed "
+                        f"{event_count} events"
+                    )
+                    last_heartbeat = current_time
+
                 # Check for shutdown before processing
                 if self._shutdown_event.is_set():
-                    logger.debug(f"Shutdown requested, stopping {source_name}")
+                    logger.info(f"Shutdown requested, stopping {source_name}")
                     break
 
-                logger.debug(f"Received event from {source_name}: {event}")
+                logger.debug(
+                    f"Received event #{event_count} from {source_name}: {event}"
+                )
 
                 # Send event to all outputs
                 for output in self.outputs:
+                    output_name = output.__class__.__name__
                     try:
+                        logger.debug(f"Sending event {event.id} to {output_name}...")
                         success = await output.send_event(event)
                         if success:
                             logger.debug(
-                                f"Successfully sent event via "
-                                f"{output.__class__.__name__}"
+                                f"Successfully sent event {event.id} via {output_name}"
                             )
                         else:
                             logger.warning(
-                                f"Failed to send event via {output.__class__.__name__}"
+                                f"Failed to send event {event.id} via {output_name}"
                             )
                     except Exception as e:
                         logger.error(
-                            f"Error sending event via {output.__class__.__name__}: {e}"
+                            f"Error sending event {event.id} via {output_name}: {e}",
+                            exc_info=True,
                         )
 
         except Exception as e:
-            logger.error(f"Error processing events from {source_name}: {e}")
+            logger.error(
+                f"Error processing events from {source_name}: {e}", exc_info=True
+            )
+            raise  # Re-raise to ensure task failure is visible
         finally:
-            logger.debug(f"Stopped processing events for source: {source_name}")
+            if event_count > 0:
+                logger.info(
+                    f"Event processing summary: {source_name} "
+                    f"processed {event_count} total events"
+                )
+            else:
+                logger.debug(
+                    f"Stopped processing events for source: {source_name} "
+                    f"(no events processed)"
+                )
 
     def setup_signal_handlers(self) -> None:
         """Setup signal handlers for graceful shutdown."""
@@ -211,9 +296,11 @@ class NotifierApp:
         """Run the application with the given configuration."""
         try:
             # Load configuration
+            logger.debug("Loading configuration...")
             config = self.load_config(config_path)
 
             # Create plugins
+            logger.debug("Creating plugins...")
             self.create_plugins(config)
 
             if not self.sources and not self.outputs:
@@ -221,13 +308,16 @@ class NotifierApp:
                 return
 
             # Setup signal handlers
+            logger.debug("Setting up signal handlers...")
             self.setup_signal_handlers()
 
             # Start plugins
+            logger.debug("Starting plugins...")
             await self.start_plugins()
-            logger.info("Application started successfully")
+            logger.info("✓ Application started successfully")
 
             # Process events until shutdown
+            logger.debug("Beginning event processing...")
             await self.process_events()
 
         except KeyboardInterrupt:

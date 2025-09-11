@@ -382,3 +382,28 @@ class TestRegistryEdgeCases:
 
         with pytest.raises(TypeError, match="is not a subclass of BasePluginConfig"):
             registry.get_component_class("wrong_config")
+
+    @patch("eoapi_notifier.core.registry.import_module")
+    def test_instance_creation_failure(self, mock_import: Mock) -> None:
+        """Test handling of instance creation failure."""
+        registry: ComponentRegistry[MockPlugin] = ComponentRegistry(MockPlugin)
+        mock_module = Mock()
+
+        # Create a component class that raises an exception during instantiation
+        class FailingPlugin(MockPlugin):
+            def __init__(self, config: MockPluginConfig) -> None:
+                raise RuntimeError("Instance creation failed")
+
+        mock_module.FailingPlugin = FailingPlugin
+        mock_module.MockPluginConfig = MockPluginConfig
+        mock_import.return_value = mock_module
+
+        registry.register(
+            name="failing_plugin",
+            module_path="test.module",
+            class_name="FailingPlugin",
+            config_class_name="MockPluginConfig",
+        )
+
+        with pytest.raises(PluginError, match="Failed to create instance"):
+            registry.create_component("failing_plugin", {})

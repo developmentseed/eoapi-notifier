@@ -41,7 +41,6 @@ class ComponentRegistry(Generic[T]):
     ) -> None:
         """Register a component for lazy loading."""
         self._registered[name] = (module_path, class_name, config_class_name)
-        logger.debug(f"Registered {name}: {module_path}.{class_name}")
 
     def is_registered(self, name: str) -> bool:
         """Check if component is registered."""
@@ -82,7 +81,6 @@ class ComponentRegistry(Generic[T]):
 
             # Cache and return - runtime validation ensures type safety
             self._loaded_classes[name] = (component_class, config_class)
-            logger.debug(f"Loaded {name}: {class_name} with {config_class_name}")
             return (component_class, config_class)
 
         except ImportError as e:

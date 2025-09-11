@@ -5,13 +5,13 @@ Provides protocol-based plugin architecture with type safety, structured metadat
 and async context management for notification sources and outputs.
 """
 
-import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
 
+from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
 from .event import NotificationEvent
@@ -101,7 +101,7 @@ class BasePlugin(ABC, Generic[C]):
             )
 
         self.config: C = config
-        self.logger: logging.Logger = logging.getLogger(self.__class__.__module__)
+        self.logger = logger
         self._running: bool = False
         self._started: bool = False
 

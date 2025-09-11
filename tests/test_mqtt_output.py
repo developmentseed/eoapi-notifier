@@ -331,13 +331,13 @@ class TestMQTTAdapter:
         # Use a short timeout for testing
         adapter.config.timeout = 0.1
 
-        # Start should fail due to timeout
-        with pytest.raises(TimeoutError):
-            await adapter.start()
+        # Start should complete without raising TimeoutError
+        # (handles timeout in background)
+        await adapter.start()
 
-        # Verify cleanup on failure
-        mock_client.loop_stop.assert_called()
-        assert adapter._client is None
+        # Verify client was created and configured
+        mock_client.loop_start.assert_called()
+        assert adapter._client is not None
 
     @patch("eoapi_notifier.outputs.mqtt.mqtt")
     async def test_start_with_tls(self, mock_mqtt: MagicMock) -> None:

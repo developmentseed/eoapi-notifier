@@ -493,19 +493,36 @@ class PgSTACSource(BaseSource):
             self.config.get_connection_info(),
         )
 
+        self.logger.debug("Step 1: Establishing database connection...")
         await self._establish_connection()
-        await self._setup_listener()
+        self.logger.debug("✓ Database connection established")
+
+        if self._connected:
+            self.logger.debug("Step 2: Setting up PostgreSQL listener...")
+            await self._setup_listener()
+            self.logger.debug("✓ PostgreSQL listener setup complete")
+        else:
+            self.logger.debug(
+                "Step 2: Skipping listener setup, will setup after connection"
+            )
+
+        self.logger.debug("Step 3: Starting operation correlator...")
         await self._start_correlator()
+        self.logger.debug("✓ Operation correlator started")
+
+        self.logger.debug("Step 4: Starting event processing...")
         self._start_event_processing()
+        self.logger.debug("✓ Event processing started")
 
         self._set_running_state(True)
+        self.logger.info("✓ pgSTAC source fully started and ready")
 
     async def stop(self) -> None:
         """Stop pgSTAC source and cleanup resources."""
         if not self.is_running:
             return
 
-        self.logger.info("Stopping pgSTAC source")
+        self.logger.debug("Stopping pgSTAC source")
         self._set_running_state(False)
 
         await self._stop_event_processing()
@@ -527,26 +544,32 @@ class PgSTACSource(BaseSource):
                 yield event
 
     async def _establish_connection(self) -> None:
-        """Establish database connection with retry logic."""
-        while True:
-            try:
-                self._connection = await asyncpg.connect(
-                    host=self.config.host,
-                    port=self.config.port,
-                    database=self.config.database,
-                    user=self.config.user,
-                    password=self.config.password,
-                )
+        """Attempt initial database connection, setup background retry if needed."""
+        try:
+            self._connection = await asyncpg.connect(
+                host=self.config.host,
+                port=self.config.port,
+                database=self.config.database,
+                user=self.config.user,
+                password=self.config.password,
+            )
 
-                self._connected = True
-                self._reconnect_attempts = 0
-                self._current_delay = self.config.reconnect_delay
+            self._connected = True
+            self._reconnect_attempts = 0
+            self._current_delay = self.config.reconnect_delay
 
-                self.logger.info("Connected to pgSTAC database")
-                break
+            self.logger.info(
+                "✓ Connected to pgSTAC database at %s:%s/%s",
+                self.config.host,
+                self.config.port,
+                self.config.database,
+            )
 
-            except Exception as e:
-                await self._handle_connection_error(e)
+        except Exception as e:
+            self.logger.warning("Initial database connection failed: %s", e)
+            self.logger.debug("Database connection will be retried in background")
+            # Start background connection retry task
+            asyncio.create_task(self._background_connection_retry())
 
     async def _handle_connection_error(self, error: Exception) -> None:
         """Handle connection errors with exponential backoff."""
@@ -574,16 +597,23 @@ class PgSTACSource(BaseSource):
 
     async def _setup_listener(self) -> None:
         """Setup PostgreSQL LISTEN for notifications."""
-        if not self._connection:
-            raise RuntimeError("No database connection available")
+        if not self._connection or not self._connected:
+            self.logger.warning("No database connection available for listener setup")
+            return
 
+        self.logger.debug("Executing LISTEN %s...", self.config.channel)
         await self._connection.execute(f"LISTEN {self.config.channel}")
-        self._notification_queue = asyncio.Queue()
+
+        if not self._notification_queue:
+            self.logger.debug("Creating notification queue...")
+            self._notification_queue = asyncio.Queue()
+
+        self.logger.debug("Adding notification listener...")
         await self._connection.add_listener(
             self.config.channel, self._handle_notification
         )
 
-        self.logger.info("Listening on channel: %s", self.config.channel)
+        self.logger.info("✓ Listening on channel: %s", self.config.channel)
 
     async def _cleanup_connection(self) -> None:
         """Clean up database connection and listener."""
@@ -603,7 +633,9 @@ class PgSTACSource(BaseSource):
 
     def _start_event_processing(self) -> None:
         """Start the background event processing task."""
+        self.logger.debug("Creating background task for notification processing...")
         self._processing_task = asyncio.create_task(self._process_notifications())
+        self.logger.debug("✓ Background notification processing task created")
 
     async def _stop_event_processing(self) -> None:
         """Stop the event processing task."""
@@ -616,10 +648,15 @@ class PgSTACSource(BaseSource):
 
     async def _process_notifications(self) -> None:
         """Background task to process incoming notifications."""
+        self.logger.debug("Starting notification processing loop...")
+        notification_count = 0
+
         while self.is_running:
             try:
-                if not self._notification_queue:
-                    await asyncio.sleep(0.1)
+                if not self._notification_queue or not self._connected:
+                    if not self._connected:
+                        self.logger.debug("Waiting for database connection...")
+                    await asyncio.sleep(1.0)
                     continue
 
                 notification = await asyncio.wait_for(
@@ -627,33 +664,72 @@ class PgSTACSource(BaseSource):
                     timeout=self.config.listen_timeout,
                 )
 
+                notification_count += 1
+                self.logger.debug(
+                    "Processing notification #%d: %s",
+                    notification_count,
+                    notification[:100],
+                )
+
                 event = self._create_notification_event(notification)
                 if event:
                     await self._event_queue.put(event)
+                    self.logger.debug(
+                        "✓ Event #%d queued: %s", notification_count, event.id
+                    )
+                else:
+                    self.logger.warning(
+                        "✗ Failed to create event from notification #%d",
+                        notification_count,
+                    )
 
             except TimeoutError:
+                # Log periodic heartbeat to show we're alive
+                if notification_count == 0:
+                    self.logger.debug(
+                        "Waiting for PostgreSQL notifications... (listening on %s)",
+                        self.config.channel,
+                    )
                 continue  # Normal timeout, keep listening
             except asyncio.CancelledError:
+                self.logger.debug("Notification processing cancelled")
                 break
             except Exception as e:
-                self.logger.error("Error processing notification: %s", e)
+                self.logger.error(
+                    "Error processing notification #%d: %s",
+                    notification_count,
+                    e,
+                    exc_info=True,
+                )
 
     def _handle_notification(
         self, connection: asyncpg.Connection, pid: int, channel: str, payload: str
     ) -> None:
         """Handle incoming PostgreSQL notification."""
+        self.logger.debug(
+            "Received PostgreSQL notification on channel %s (pid=%d): %s",
+            channel,
+            pid,
+            payload[:200],
+        )
+
         if self._notification_queue:
             try:
                 self._notification_queue.put_nowait(payload)
+                self.logger.debug("✓ Notification queued for processing")
             except asyncio.QueueFull:
-                self.logger.warning("Notification queue full, dropping notification")
+                self.logger.error(
+                    "✗ Notification queue full (%d items), dropping notification",
+                    self._notification_queue.qsize(),
+                )
 
     def _create_notification_event(self, payload: str) -> NotificationEvent | None:
         """Create NotificationEvent from PostgreSQL notification payload."""
         try:
+            self.logger.debug("Parsing notification payload: %s", payload)
             data = json.loads(payload)
 
-            return NotificationEvent(
+            event = NotificationEvent(
                 id=f"pgstac-{data.get('id', 'unknown')}",
                 source=self.config.event_source,
                 type=self.config.event_type,
@@ -663,21 +739,95 @@ class PgSTACSource(BaseSource):
                 timestamp=datetime.now(UTC),
                 data=data,
             )
+
+            self.logger.debug(
+                "✓ Created event: %s (op=%s, collection=%s, item_id=%s)",
+                event.id,
+                event.operation,
+                event.collection,
+                event.item_id,
+            )
+            return event
+
         except (json.JSONDecodeError, KeyError) as e:
-            self.logger.warning("Invalid notification payload: %s", e)
+            self.logger.error(
+                "✗ Invalid notification payload: %s - payload was: %s", e, payload
+            )
             return None
 
     async def _raw_event_stream(self) -> AsyncIterator[NotificationEvent]:
         """Generate raw event stream from the event queue."""
+        self.logger.debug("Starting raw event stream from queue...")
+        event_stream_count = 0
+
         while self.is_running:
             try:
                 event = await asyncio.wait_for(self._event_queue.get(), timeout=1.0)
+                event_stream_count += 1
+                self.logger.debug(
+                    "Streaming event #%d from queue: %s", event_stream_count, event.id
+                )
                 yield event
             except TimeoutError:
+                # Periodic logging to show we're waiting for events
+                if event_stream_count == 0:
+                    self.logger.debug(
+                        "Raw event stream waiting for events... (queue size: %d)",
+                        self._event_queue.qsize(),
+                    )
                 continue
             except Exception as e:
-                self.logger.error("Error in raw event stream: %s", e)
+                self.logger.error("Error in raw event stream: %s", e, exc_info=True)
                 break
+
+        self.logger.debug(
+            "Raw event stream ended (streamed %d events)", event_stream_count
+        )
+
+    async def _background_connection_retry(self) -> None:
+        """Background task to retry database connection."""
+        self.logger.debug("Starting background database connection retry...")
+
+        while self.is_running and not self._connected:
+            try:
+                await asyncio.sleep(self._current_delay)
+
+                if not self.is_running:
+                    break
+
+                self.logger.debug(
+                    "Attempting database reconnection (attempt %d)...",
+                    self._reconnect_attempts + 1,
+                )
+
+                self._connection = await asyncpg.connect(
+                    host=self.config.host,
+                    port=self.config.port,
+                    database=self.config.database,
+                    user=self.config.user,
+                    password=self.config.password,
+                )
+
+                self._connected = True
+                self._reconnect_attempts = 0
+                self._current_delay = self.config.reconnect_delay
+
+                self.logger.info(
+                    "✓ Background reconnection successful at %s:%s/%s",
+                    self.config.host,
+                    self.config.port,
+                    self.config.database,
+                )
+
+                # Setup listener now that we're connected
+                await self._setup_listener()
+                self.logger.debug("✓ PostgreSQL listener setup after reconnection")
+                break
+
+            except Exception as e:
+                await self._handle_connection_error(e)
+
+        self.logger.debug("Background connection retry task ended")
 
     # Correlator Management Methods
 
@@ -714,6 +864,11 @@ class PgSTACSource(BaseSource):
             "connected": self._connected,
             "reconnect_attempts": self._reconnect_attempts,
             "event_queue_size": self._event_queue.qsize(),
+            "notification_queue_size": self._notification_queue.qsize()
+            if self._notification_queue
+            else 0,
+            "running": self.is_running,
+            "started": self.is_started,
         }
 
         if self._correlator:

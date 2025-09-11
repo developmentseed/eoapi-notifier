@@ -38,7 +38,7 @@ outputs:
       # use_tls: true
       # ca_cert: /path/to/ca.pem
       # Optional: topic configuration
-      # topic_prefix: "eoapi/"
+      # topic: "eoapi/"
       # qos: 1
 
 # Example with multiple sources and outputs

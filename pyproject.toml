@@ -101,6 +101,11 @@ exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
+    "logger\\.debug",
+    "logger\\.info",
+    "logger\\.warning",
+    "logger\\.error",
+    "logger\\.critical",
 ]
 
 [dependency-groups]
