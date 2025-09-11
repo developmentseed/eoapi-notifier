@@ -27,7 +27,6 @@ class PluginMetadata:
 
     name: str
     description: str
-    version: str = "1.0.0"
     tags: list[str] = field(default_factory=list)
     category: str = "unknown"
     priority: int = 0
@@ -159,7 +158,6 @@ class BasePlugin(ABC, Generic[C]):
             "config_type": self.config.__class__.__name__,
             "metadata": {
                 "description": metadata.description,
-                "version": metadata.version,
                 "tags": metadata.tags,
                 "category": metadata.category,
             },

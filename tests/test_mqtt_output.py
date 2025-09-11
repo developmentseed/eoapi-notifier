@@ -135,7 +135,7 @@ class TestMQTTConfig:
 
         assert metadata.name == "mqtt"
         assert "MQTT broker output adapter" in metadata.description
-        assert metadata.version == "0.0.2"
+
         assert metadata.category == "messaging"
         assert "mqtt" in metadata.tags
         assert "messaging" in metadata.tags

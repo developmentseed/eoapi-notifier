@@ -413,7 +413,6 @@ class PgSTACSourceConfig(BasePluginConfig):
         return PluginMetadata(
             name="pgstac",
             description="pgSTAC LISTEN/NOTIFY source",
-            version="0.0.2",
             category="database",
             tags=[
                 "postgresql",

@@ -52,7 +52,6 @@ class MockSourceConfig(BasePluginConfig):
         return PluginMetadata(
             name="mock_source",
             description="Test source for unit tests",
-            version="1.0.0",
             tags=["test", "mock"],
             category="source",
         )
@@ -84,7 +83,6 @@ class MockOutputConfig(BasePluginConfig):
         return PluginMetadata(
             name="mock_output",
             description="Test output for unit tests",
-            version="1.0.0",
             tags=["test", "mock"],
             category="output",
         )

@@ -76,7 +76,7 @@ class TestPgSTACSourceConfig:
         metadata = PgSTACSourceConfig.get_metadata()
 
         assert metadata.name == "pgstac"
-        assert metadata.version == "0.0.2"
+
         assert "correlation" in metadata.tags
 
     def test_sample_config(self) -> None:
