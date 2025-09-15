@@ -36,6 +36,10 @@ class NotifierApp:
                 )
 
             logger.info(f"Loaded configuration from {config_path}")
+            logger.info(
+                "Environment variables will be applied as overrides by individual "
+                "plugins"
+            )
             return config
         except FileNotFoundError:
             logger.error(f"Configuration file not found: {config_path}")
@@ -61,6 +65,10 @@ class NotifierApp:
                 continue
 
             try:
+                logger.debug(
+                    f"Creating source {source_type} with environment variable "
+                    f"overrides..."
+                )
                 source = create_source(source_type, source_config_data)
                 self.sources.append(source)
                 logger.info(f"Created source: {source_type}")
@@ -84,6 +92,10 @@ class NotifierApp:
                 continue
 
             try:
+                logger.debug(
+                    f"Creating output {output_type} with environment variable "
+                    f"overrides..."
+                )
                 output = create_output(output_type, output_config_data)
                 self.outputs.append(output)
                 logger.info(f"Created output: {output_type}")

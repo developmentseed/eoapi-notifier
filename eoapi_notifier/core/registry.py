@@ -63,9 +63,12 @@ class ComponentRegistry(Generic[T]):
         module_path, class_name, config_class_name = self._registered[name]
 
         try:
+            logger.debug(f"Importing module: {module_path}")
             module = import_module(module_path)
+            logger.debug(f"✓ Module imported successfully: {module_path}")
 
             # Get component class
+            logger.debug(f"Getting component class: {class_name}")
             component_class = getattr(module, class_name)
             if not issubclass(component_class, self.base_type):
                 raise TypeError(
@@ -73,6 +76,7 @@ class ComponentRegistry(Generic[T]):
                 )
 
             # Get config class
+            logger.debug(f"Getting config class: {config_class_name}")
             config_class = getattr(module, config_class_name)
             if not issubclass(config_class, BasePluginConfig):
                 raise TypeError(
@@ -81,12 +85,18 @@ class ComponentRegistry(Generic[T]):
 
             # Cache and return - runtime validation ensures type safety
             self._loaded_classes[name] = (component_class, config_class)
+            logger.debug(f"✓ Successfully loaded component: {name}")
             return (component_class, config_class)
 
         except ImportError as e:
+            logger.error(f"Import failed for {module_path}: {e}")
             raise ImportError(f"Cannot import module {module_path}: {e}") from e
         except AttributeError as e:
+            logger.error(f"Class not found in {module_path}: {e}")
             raise AttributeError(f"Cannot find class in {module_path}: {e}") from e
+        except Exception as e:
+            logger.error(f"Unexpected error loading {name}: {e}")
+            raise
 
     def create_component(self, name: str, config: dict[str, Any]) -> T:
         """Create component instance with validated configuration."""
@@ -94,14 +104,21 @@ class ComponentRegistry(Generic[T]):
 
         # Validate configuration
         try:
+            logger.debug(f"Validating config for {name}: {config}")
             validated_config = config_class(**config)
+            logger.debug(f"✓ Config validated for {name}")
         except ValidationError as e:
+            logger.error(f"Config validation failed for {name}: {e}")
             raise PluginError(name, f"Invalid configuration: {e}") from e
 
         # Create instance
         try:
-            return component_class(validated_config)
+            logger.debug(f"Creating instance of {name}")
+            instance = component_class(validated_config)
+            logger.debug(f"✓ Instance created for {name}")
+            return instance
         except Exception as e:
+            logger.error(f"Instance creation failed for {name}: {e}")
             raise PluginError(name, f"Failed to create instance: {e}") from e
 
 
@@ -136,6 +153,12 @@ class OutputRegistry(ComponentRegistry[BaseOutput[Any]]):
             module_path="eoapi_notifier.outputs.mqtt",
             class_name="MQTTAdapter",
             config_class_name="MQTTConfig",
+        )
+        self.register(
+            name="cloudevents",
+            module_path="eoapi_notifier.outputs.cloudevents",
+            class_name="CloudEventsAdapter",
+            config_class_name="CloudEventsConfig",
         )
 
 

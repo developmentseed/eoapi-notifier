@@ -727,17 +727,48 @@ class PgSTACSource(BaseSource):
         """Create NotificationEvent from PostgreSQL notification payload."""
         try:
             self.logger.debug("Parsing notification payload: %s", payload)
-            data = json.loads(payload)
+            notification_data = json.loads(payload)
+
+            # Extract operation from notification
+            operation = notification_data.get("operation", "INSERT").upper()
+            items = notification_data.get("items", [])
+
+            if not items:
+                self.logger.warning("No items found in pgSTAC notification payload")
+                return None
+
+            # Handle first item (pgSTAC sends arrays but we process individually)
+            first_item = items[0]
+            item_id = first_item.get("id")
+            collection = first_item.get("collection", "unknown")
+
+            self.logger.debug(
+                "Extracted from payload: operation=%s, item_id=%s, collection=%s, "
+                "total_items=%d",
+                operation,
+                item_id,
+                collection,
+                len(items),
+            )
+
+            if not item_id:
+                self.logger.warning("Item missing id field, skipping: %s", first_item)
+                return None
 
             event = NotificationEvent(
-                id=f"pgstac-{data.get('id', 'unknown')}",
+                id=f"pgstac-{item_id}",
                 source=self.config.event_source,
                 type=self.config.event_type,
-                operation=data.get("op", "unknown"),
-                collection=data.get("collection", "unknown"),
-                item_id=data.get("id"),
+                operation=operation,
+                collection=collection,
+                item_id=item_id,
                 timestamp=datetime.now(UTC),
-                data=data,
+                data={
+                    "operation": operation,
+                    "items": items,
+                    "total_items": len(items),
+                    "raw_payload": notification_data,
+                },
             )
 
             self.logger.debug(

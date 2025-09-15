@@ -5,6 +5,7 @@ Provides protocol-based plugin architecture with type safety, structured metadat
 and async context management for notification sources and outputs.
 """
 
+import os
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -12,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
 
 from loguru import logger
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from .event import NotificationEvent
 
@@ -60,9 +61,118 @@ class BasePluginConfig(BaseModel):
     Base configuration class for plugins implementing the protocol.
 
     Provides common configuration methods and Pydantic validation.
+    Automatically applies environment variable overrides for all config fields.
     """
 
     model_config = ConfigDict(extra="forbid")
+
+    def _get_plugin_prefix(self) -> str:
+        """
+        Extract plugin prefix from config class name.
+
+        Examples:
+        - PgSTACSourceConfig -> PGSTAC
+        - MQTTConfig -> MQTT
+        - CloudEventsConfig -> CLOUDEVENTS
+        """
+        class_name = self.__class__.__name__
+
+        # Remove common suffixes
+        for suffix in ["SourceConfig", "Config", "Source", "Output"]:
+            if class_name.endswith(suffix):
+                class_name = class_name[: -len(suffix)]
+                break
+
+        # Convert to uppercase and handle special cases
+        if class_name.lower() == "pgstac":
+            return "PGSTAC"
+        elif class_name.lower() == "cloudevents":
+            return "CLOUDEVENTS"
+        elif class_name.lower() == "mqtt":
+            return "MQTT"
+        else:
+            return class_name.upper()
+
+    @model_validator(mode="after")
+    def apply_env_overrides(self) -> "BasePluginConfig":
+        """
+        Apply environment variable overrides for all configuration fields.
+
+        Uses simple plugin-prefixed environment variables:
+        - PGSTAC_HOST, PGSTAC_PORT, PGSTAC_PASSWORD, etc.
+        - MQTT_BROKER_HOST, MQTT_TIMEOUT, MQTT_USE_TLS, etc.
+        - CLOUDEVENTS_ENDPOINT, CLOUDEVENTS_TIMEOUT, etc.
+        """
+        plugin_prefix = self._get_plugin_prefix()
+
+        for field_name, field_info in self.model_fields.items():
+            # Check for plugin-prefixed environment variable
+            env_var_name = f"{plugin_prefix}_{field_name.upper()}"
+            env_value = os.getenv(env_var_name)
+
+            if env_value is None:
+                continue
+
+            try:
+                # Get the field's type annotation
+                field_type = field_info.annotation
+
+                # Handle Union types (like str | None) safely
+                origin = getattr(field_type, "__origin__", None)
+                if origin is not None:
+                    args = getattr(field_type, "__args__", ())
+                    if len(args) > 0:
+                        # For Union types, use the first non-None type
+                        non_none_types = [arg for arg in args if arg is not type(None)]
+                        if non_none_types:
+                            field_type = non_none_types[0]
+                    elif origin is list:
+                        # Handle list types - split by comma
+                        list_value = [
+                            item.strip()
+                            for item in env_value.split(",")
+                            if item.strip()
+                        ]
+                        setattr(self, field_name, list_value)
+                        logger.debug(
+                            f"Applied env override: {env_var_name}={env_value} -> "
+                            f"{field_name}={list_value}"
+                        )
+                        continue
+
+                # Convert environment variable value to appropriate type
+                converted_value: Any
+                if field_type is bool or (
+                    isinstance(field_type, type) and issubclass(field_type, bool)
+                ):
+                    # Handle boolean conversion
+                    converted_value = env_value.lower() in ("true", "1", "yes", "on")
+                elif field_type is int or (
+                    isinstance(field_type, type) and issubclass(field_type, int)
+                ):
+                    converted_value = int(env_value)
+                elif field_type is float or (
+                    isinstance(field_type, type) and issubclass(field_type, float)
+                ):
+                    converted_value = float(env_value)
+                else:
+                    # Default to string
+                    converted_value = env_value
+
+                # Apply the override
+                setattr(self, field_name, converted_value)
+                logger.debug(
+                    f"Applied env override: {env_var_name}={env_value} -> "
+                    f"{field_name}={converted_value}"
+                )
+
+            except (ValueError, TypeError) as e:
+                logger.warning(
+                    f"Failed to apply env override {env_var_name}={env_value} to "
+                    f"field {field_name}: {e}"
+                )
+
+        return self
 
     @classmethod
     def get_sample_config(cls) -> dict[str, Any]:

@@ -227,7 +227,10 @@ class TestPgSTACSourceBasic:
         """Test creating events from notification payloads."""
         source = PgSTACSource(basic_config)
 
-        payload = '{"op": "INSERT", "collection": "test", "id": "item-123"}'
+        payload = (
+            '{"operation": "INSERT", "items": ['
+            '{"collection": "test", "id": "item-123"}]}'
+        )
         event = source._create_notification_event(payload)
 
         assert event is not None
@@ -568,8 +571,9 @@ class TestPgSTACSourceErrorHandling:
         assert source._create_notification_event("invalid json") is None
 
         # Valid JSON creates event
-        event = source._create_notification_event(
-            '{"op": "INSERT", "collection": "test", "id": "item1"}'
+        payload = (
+            '{"operation": "INSERT", "items": [{"collection": "test", "id": "item1"}]}'
         )
+        event = source._create_notification_event(payload)
         assert event is not None
         assert event.operation == "INSERT"
