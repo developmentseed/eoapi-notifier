@@ -10,11 +10,13 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [pydantic>=2.11.7, loguru>=0.7.3, types-PyYAML]
+        exclude: ^integration/
   - repo: https://github.com/adrienverge/yamllint.git
     rev: v1.37.1
     hooks:
       - id: yamllint
         args: [-c=.yamllint.yaml]
+        exclude: ^integration/
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.7
     hooks:

@@ -1,0 +1,2 @@
+# This directory contains generated configuration files for Docker Compose integration testing.
+# Files are generated dynamically by shared/config_template.py during setup.

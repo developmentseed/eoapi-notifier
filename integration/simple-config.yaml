@@ -1,0 +1,36 @@
+sources:
+- type: pgstac
+  config:
+    host: localhost
+    port: 5433
+    database: postgis
+    user: postgres
+    password: postgres
+    channel: pgstac_items_change
+    event_source: /eoapi/stac/pgstac
+    event_type: org.eoapi.stac.item
+    max_reconnect_attempts: 10
+    reconnect_delay: 3.0
+    listen_timeout: 30.0
+    enable_correlation: false
+outputs:
+- type: mqtt
+  config:
+    broker_host: localhost
+    broker_port: 1884
+    topic: eoapi/stac/items
+    qos: 1
+    timeout: 30.0
+    keepalive: 60
+    clean_session: true
+    max_reconnect_attempts: 10
+    reconnect_delay: 3.0
+    queue_size: 1000
+- type: cloudevents
+  config:
+    endpoint: http://localhost:8080
+    source: /eoapi/stac/pgstac
+    event_type: org.eoapi.stac
+    timeout: 30.0
+    max_retries: 3
+    retry_backoff: 1.0

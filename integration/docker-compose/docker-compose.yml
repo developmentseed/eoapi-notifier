@@ -1,0 +1,112 @@
+services:
+  # Main eoAPI notifier service
+  eoapi-notifier:
+    build: ../../
+    container_name: eoapi-notifier
+    volumes:
+      - ./config:/app/config:ro
+    environment:
+      - LOG_LEVEL=INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mqtt:
+        condition: service_started
+      cloudevents-endpoint:
+        condition: service_started
+    networks:
+      - eoapi-network
+    entrypoint: ["uv", "run", "eoapi-notifier"]
+    command: ["/app/config/integration-config.yaml"]
+
+  # PostgreSQL database
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: eoapi-postgres
+    environment:
+      - POSTGRES_DB=postgis
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST_AUTH_METHOD=trust
+      - POSTGRES_INITDB_ARGS=--auth-host=trust --auth-local=trust
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgis"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - eoapi-network
+
+
+
+  # MQTT broker
+  mqtt:
+    image: eclipse-mosquitto:2.0
+    container_name: eoapi-mqtt
+    ports:
+      - "1884:1883"
+      - "9002:9001"
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mqtt_data:/mosquitto/data
+      - mqtt_log:/mosquitto/log
+    networks:
+      - eoapi-network
+
+  # CloudEvents HTTP endpoint
+  cloudevents-endpoint:
+    image: python:3.12-slim
+    container_name: eoapi-cloudevents
+    ports:
+      - "8080:8080"
+    networks:
+      - eoapi-network
+    volumes:
+      - ./config/cloudevents_server.py:/app/cloudevents_server.py:ro
+    command: >
+      bash -c "
+      pip install fastapi uvicorn cloudevents &&
+      python /app/cloudevents_server.py
+      "
+
+  # Optional tools (use --profile tools to enable)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: eoapi-pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@example.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_CONFIG_SERVER_MODE=False
+    ports:
+      - "8082:80"
+    depends_on:
+      - postgres
+    networks:
+      - eoapi-network
+    profiles:
+      - tools
+
+  mqtt-client:
+    image: emqx/mqttx-web:latest
+    container_name: eoapi-mqtt-client
+    ports:
+      - "8083:80"
+    depends_on:
+      - mqtt
+    networks:
+      - eoapi-network
+    profiles:
+      - tools
+
+networks:
+  eoapi-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  mqtt_data:
+  mqtt_log:
