@@ -13,36 +13,66 @@ from uuid import uuid4
 import httpx
 from cloudevents.conversion import to_binary
 from cloudevents.http import CloudEvent
-from pydantic import field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from ..core.event import NotificationEvent
 from ..core.plugin import BaseOutput, BasePluginConfig, PluginMetadata
+
+
+class RefConfig(BaseModel):
+    """Kubernetes resource reference configuration."""
+
+    apiVersion: str
+    kind: str
+    name: str
+    namespace: str | None = None
+
+
+class DestinationConfig(BaseModel):
+    """Destination configuration - either ref or url."""
+
+    ref: RefConfig | None = None
+    url: str | None = None
+
+    @model_validator(mode="after")
+    def validate_mutually_exclusive(self) -> "DestinationConfig":
+        if self.ref and self.url:
+            raise ValueError(
+                "destination.ref and destination.url are mutually exclusive"
+            )
+        if not self.ref and not self.url:
+            raise ValueError(
+                "Either destination.ref or destination.url must be specified"
+            )
+        return self
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str | None) -> str | None:
+        if v and not v.startswith(("http://", "https://")):
+            raise ValueError("destination.url must start with http:// or https://")
+        return v
 
 
 class CloudEventsConfig(BasePluginConfig):
     """Configuration for CloudEvents output adapter with environment variable
     support."""
 
-    endpoint: str | None = None
+    destination: DestinationConfig
     source: str = "/eoapi/stac"
     event_type: str = "org.eoapi.stac"
     timeout: float = 30.0
     max_retries: int = 3
     retry_backoff: float = 1.0
 
-    @field_validator("endpoint")
-    @classmethod
-    def validate_endpoint(cls, v: str | None) -> str | None:
-        if v and not v.startswith(("http://", "https://")):
-            raise ValueError("endpoint must start with http:// or https://")
-        return v
-
     @model_validator(mode="after")
     def apply_knative_overrides(self) -> "CloudEventsConfig":
         """Apply KNative SinkBinding environment variables as special case."""
-        # K_SINK overrides endpoint (KNative SinkBinding)
+        # K_SINK overrides destination for ref-based configs (KNative SinkBinding)
         if k_sink := os.getenv("K_SINK"):
-            self.endpoint = k_sink
+            if self.destination.ref:
+                # For ref-based destinations, K_SINK provides the resolved URL
+                self.destination = DestinationConfig(url=k_sink)
 
         # K_SOURCE overrides source
         if k_source := os.getenv("K_SOURCE"):
@@ -57,7 +87,15 @@ class CloudEventsConfig(BasePluginConfig):
     @classmethod
     def get_sample_config(cls) -> dict[str, Any]:
         return {
-            "endpoint": None,  # Uses K_SINK env var if not set
+            "destination": {
+                "ref": {
+                    "apiVersion": "messaging.knative.dev/v1",
+                    "kind": "Broker",
+                    "name": "eoapi-broker",
+                    "namespace": "serverless",
+                }
+                # "url": "https://example.com/webhook"  # mutually exclusive with ref
+            },
             "source": "/eoapi/stac",
             "event_type": "org.eoapi.stac",
             "timeout": 30.0,
@@ -76,12 +114,27 @@ class CloudEventsConfig(BasePluginConfig):
         )
 
     def get_connection_info(self) -> str:
-        url = self.endpoint or os.getenv("K_SINK", "K_SINK env var")
+        if self.destination.url:
+            url = self.destination.url
+        elif self.destination.ref:
+            ref_name = f"{self.destination.ref.kind}/{self.destination.ref.name}"
+            url = os.getenv("K_SINK", f"K_SINK env var -> {ref_name}")
+        else:
+            url = "unresolved"
         return f"POST {url}"
 
     def get_status_info(self) -> dict[str, Any]:
+        if self.destination.url:
+            endpoint_info = self.destination.url
+        elif self.destination.ref:
+            endpoint_info = (
+                f"{self.destination.ref.kind}/{self.destination.ref.name} (via K_SINK)"
+            )
+        else:
+            endpoint_info = "unresolved"
+
         return {
-            "Endpoint": self.endpoint or "K_SINK env var",
+            "Destination": endpoint_info,
             "Source": self.source,
             "Event Type": self.event_type,
             "Timeout": f"{self.timeout}s",
@@ -107,12 +160,19 @@ class CloudEventsAdapter(BaseOutput):
             f"max_retries={self.config.max_retries}"
         )
 
-        endpoint = self.config.endpoint
-        if not endpoint:
-            raise ValueError(
-                "endpoint configuration required (can be set via config, K_SINK, "
-                "or CLOUDEVENTS_ENDPOINT env vars)"
-            )
+        # Get endpoint URL
+        if self.config.destination.url:
+            endpoint = self.config.destination.url
+        elif self.config.destination.ref:
+            k_sink = os.getenv("K_SINK")
+            if not k_sink:
+                raise ValueError(
+                    f"K_SINK environment variable required for ref destination "
+                    f"{self.config.destination.ref.kind}/{self.config.destination.ref.name}"
+                )
+            endpoint = k_sink
+        else:
+            raise ValueError("destination.ref or destination.url must be configured")
 
         self.logger.debug(f"Step 1: Resolved endpoint: {endpoint}")
 
@@ -151,7 +211,15 @@ class CloudEventsAdapter(BaseOutput):
             return False
 
         try:
-            endpoint = self.config.endpoint
+            # Get endpoint URL
+            if self.config.destination.url:
+                endpoint = self.config.destination.url
+            else:
+                k_sink = os.getenv("K_SINK")
+                if not k_sink:
+                    self.logger.error("K_SINK not available for ref destination")
+                    return False
+                endpoint = k_sink
 
             # Convert to CloudEvent
             self.logger.debug(f"Converting event {event.id} to CloudEvent format...")

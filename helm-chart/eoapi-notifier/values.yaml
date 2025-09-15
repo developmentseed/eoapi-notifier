@@ -59,10 +59,17 @@ config:
 
     - type: cloudevents
       config:
-        # Will be overridden by K_SINK from KNative SinkBinding
-        endpoint: https://example.com/webhook
-        source: /eoapi/stac
-        event_type: org.eoapi.stac
+        source: /eoapi/pgstac
+        event_type: org.eoapi.stac.item
+        destination:
+          # Use ref for Knative resources
+          ref:
+            apiVersion: messaging.knative.dev/v1
+            kind: Broker
+            name: eoapi-broker
+            namespace: serverless
+          # Alternatively, use url for direct HTTP endpoints
+          # url: https://example.com/webhook
 
 # Secrets
 secrets:
@@ -75,27 +82,9 @@ secrets:
 # These will be injected as environment variables and automatically override config values
 # Use plugin-prefixed variables: PGSTAC_PASSWORD, MQTT_USERNAME, CLOUDEVENTS_ENDPOINT, etc
 #
-# KNative Support:
-# The cloudevents plugin supports K_SINK variables for KNative SinkBinding:
-# - K_SINK: Overrides CLOUDEVENTS_ENDPOINT (automatically set by SinkBinding)
-# - K_SOURCE: Overrides CLOUDEVENTS_SOURCE
-# - K_TYPE: Overrides CLOUDEVENTS_EVENT_TYPE
-#
-# For KNative integration, use SinkBinding to automatically inject K_SINK:
-#   apiVersion: sources.knative.dev/v1beta1
-#   kind: SinkBinding
-#   metadata:
-#     name: eoapi-notifier-binding
-#   spec:
-#     subject:
-#       apiVersion: apps/v1
-#       kind: Deployment
-#       name: eoapi-notifier
-#     sink:
-#       ref:
-#         apiVersion: serving.knative.dev/v1
-#         kind: Service
-#         name: my-knative-service
+# CloudEvents destination options:
+# - destination.ref: Kubernetes resource reference (uses SinkBinding)
+# - destination.url: Direct HTTP endpoint
 env: {}
   # Examples - Standard environment variables:
   # PGSTAC_HOST: postgresql-service
@@ -105,11 +94,6 @@ env: {}
   # MQTT_USE_TLS: "true"
   #
   # CloudEvents examples:
-  # CLOUDEVENTS_ENDPOINT: https://my-webhook-url
   # CLOUDEVENTS_SOURCE: /eoapi/stac/production
   # CLOUDEVENTS_EVENT_TYPE: org.eoapi.stac.item
-  #
-  # KNative examples (typically set by SinkBinding):
-  # K_SINK: https://my-knative-service.default.svc.cluster.local
-  # K_SOURCE: /eoapi/stac/pgstac
-  # K_TYPE: org.eoapi.stac
+  # K_SINK: https://my-service.default.svc.cluster.local (set by SinkBinding)

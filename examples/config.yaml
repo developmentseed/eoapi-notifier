@@ -46,17 +46,22 @@ outputs:
       # topic: "eoapi/"               # MQTT_TOPIC
       # qos: 1                        # MQTT_QOS
 
-  # CloudEvents HTTP output for sending events as CloudEvents
-  #
-  # Besides the regular overwrite, this plugin also supports K_SINK
-  # https://knative.dev/docs/eventing/custom-event-source/sinkbinding/
+  # CloudEvents output for sending events as CloudEvents
   - type: cloudevents
     config:
-      endpoint: https://example.com/webhook  # CLOUDEVENTS_ENDPOINT or K_SINK
+      source: "/eoapi/pgstac"              # CLOUDEVENTS_SOURCE or K_SOURCE
+      event_type: "org.eoapi.stac.item"    # CLOUDEVENTS_EVENT_TYPE or K_TYPE
 
-      # Optional: CloudEventattributes
-      # source: "/eoapi/stac"               # CLOUDEVENTS_SOURCE or K_SOURCE
-      # event_type: "org.eoapi.stac"        # CLOUDEVENTS_EVENT_TYPE or K_TYPE
+      destination:
+        # Option 1: Kubernetes resource reference (uses SinkBinding)
+        ref:
+          apiVersion: messaging.knative.dev/v1
+          kind: Broker
+          name: eoapi-broker
+          namespace: serverless
+
+        # Option 2: Direct HTTP endpoint (alternative to ref)
+        # url: https://example.com/webhook
 
       # Optional: HTTP settings
       # timeout: 30.0                       # CLOUDEVENTS_TIMEOUT

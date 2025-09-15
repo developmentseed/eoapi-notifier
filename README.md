@@ -88,6 +88,7 @@ See [Helm Chart README](helm-chart/eoapi-notifier/README.md) for configuration o
 
 #### Outputs
 - `mqtt`: Publish events to MQTT broker
+- `cloudevents`: Send events as CloudEvents
 
 ## Development
 
