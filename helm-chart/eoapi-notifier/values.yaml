@@ -2,7 +2,7 @@
 replicaCount: 1
 
 image:
-  repository: eoapi-notifier
+  repository: ghcr.io/developmentseed/eoapi-notifier
   pullPolicy: IfNotPresent
   tag: ""
 
@@ -57,9 +57,59 @@ config:
         broker_host: mqtt-broker
         broker_port: 1883
 
+    - type: cloudevents
+      config:
+        # Will be overridden by K_SINK from KNative SinkBinding
+        endpoint: https://example.com/webhook
+        source: /eoapi/stac
+        event_type: org.eoapi.stac
+
 # Secrets
 secrets:
   postgresql:
     create: true
     username: postgres
     password: password
+
+# Environment variables
+# These will be injected as environment variables and automatically override config values
+# Use plugin-prefixed variables: PGSTAC_PASSWORD, MQTT_USERNAME, CLOUDEVENTS_ENDPOINT, etc
+#
+# KNative Support:
+# The cloudevents plugin supports K_SINK variables for KNative SinkBinding:
+# - K_SINK: Overrides CLOUDEVENTS_ENDPOINT (automatically set by SinkBinding)
+# - K_SOURCE: Overrides CLOUDEVENTS_SOURCE
+# - K_TYPE: Overrides CLOUDEVENTS_EVENT_TYPE
+#
+# For KNative integration, use SinkBinding to automatically inject K_SINK:
+#   apiVersion: sources.knative.dev/v1beta1
+#   kind: SinkBinding
+#   metadata:
+#     name: eoapi-notifier-binding
+#   spec:
+#     subject:
+#       apiVersion: apps/v1
+#       kind: Deployment
+#       name: eoapi-notifier
+#     sink:
+#       ref:
+#         apiVersion: serving.knative.dev/v1
+#         kind: Service
+#         name: my-knative-service
+env: {}
+  # Examples - Standard environment variables:
+  # PGSTAC_HOST: postgresql-service
+  # PGSTAC_PORT: "5432"
+  # PGSTAC_PASSWORD: secret-password
+  # MQTT_BROKER_HOST: mqtt-broker-service
+  # MQTT_USE_TLS: "true"
+  #
+  # CloudEvents examples:
+  # CLOUDEVENTS_ENDPOINT: https://my-webhook-url
+  # CLOUDEVENTS_SOURCE: /eoapi/stac/production
+  # CLOUDEVENTS_EVENT_TYPE: org.eoapi.stac.item
+  #
+  # KNative examples (typically set by SinkBinding):
+  # K_SINK: https://my-knative-service.default.svc.cluster.local
+  # K_SOURCE: /eoapi/stac/pgstac
+  # K_TYPE: org.eoapi.stac

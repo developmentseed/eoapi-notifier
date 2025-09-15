@@ -1,16 +1,20 @@
 # eoAPI Notifier Configuration Example
-# This file shows how to configure sources and outputs for the notifier
+#
+# Environment Variable Overrides:
+# Any field can be overridden using: PLUGINNAME_FIELDNAME
+# Examples: PGSTAC_HOST, MQTT_USE_TLS, CLOUDEVENTS_ENDPOINT
+
 
 # Sources: Define where notifications come from
 sources:
   # PostgreSQL/pgSTAC source for database changes
   - type: pgstac
     config:
-      host: localhost
-      port: 5432
-      database: postgis
-      username: username
-      password: password
+      host: localhost                    # Override: PGSTAC_HOST
+      port: 5432                         # Override: PGSTAC_PORT
+      database: postgis                  # Override: PGSTAC_DATABASE
+      user: postgres                     # Override: PGSTAC_USER
+      password: changeme                 # Override: PGSTAC_PASSWORD
 
       # Optional: specific table patterns to monitor
       # tables: ["items", "collections"]
@@ -20,26 +24,43 @@ sources:
 
       # Operation Correlation Settings
       # Correlation transforms pgSTAC DELETE+INSERT pairs into semantic UPDATE events
-      # enable_correlation: true       # Enable DELETE+INSERT correlation (default: true)
-      # correlation_window: 5.0        # Time window to correlate operations in seconds
-      # cleanup_interval: 1.0          # How often to check for expired operations in seconds
+      # enable_correlation: true       # PGSTAC_ENABLE_CORRELATION
+      # correlation_window: 5.0        # PGSTAC_CORRELATION_WINDOW
+      # cleanup_interval: 1.0          # PGSTAC_CLEANUP_INTERVAL
 
 # Outputs: Define where notifications are sent
 outputs:
   # MQTT output for publishing events
   - type: mqtt
     config:
-      broker_host: localhost
-      broker_port: 1883
+      broker_host: localhost          # MQTT_BROKER_HOST
+      broker_port: 1883               # MQTT_BROKER_PORT
+
       # Optional: authentication
-      # username: mqtt_user
-      # password: mqtt_password
+      # username: mqtt_user           # MQTT_USERNAME
+      # password: mqtt_password       # MQTT_PASSWORD
       # Optional: TLS settings
-      # use_tls: true
-      # ca_cert: /path/to/ca.pem
+      # use_tls: true                 # MQTT_USE_TLS
+
       # Optional: topic configuration
-      # topic: "eoapi/"
-      # qos: 1
+      # topic: "eoapi/"               # MQTT_TOPIC
+      # qos: 1                        # MQTT_QOS
+
+  # CloudEvents HTTP output for sending events as CloudEvents
+  #
+  # Besides the regular overwrite, this plugin also supports K_SINK
+  # https://knative.dev/docs/eventing/custom-event-source/sinkbinding/
+  - type: cloudevents
+    config:
+      endpoint: https://example.com/webhook  # CLOUDEVENTS_ENDPOINT or K_SINK
+
+      # Optional: CloudEventattributes
+      # source: "/eoapi/stac"               # CLOUDEVENTS_SOURCE or K_SOURCE
+      # event_type: "org.eoapi.stac"        # CLOUDEVENTS_EVENT_TYPE or K_TYPE
+
+      # Optional: HTTP settings
+      # timeout: 30.0                       # CLOUDEVENTS_TIMEOUT
+      # max_retries: 3                      # CLOUDEVENTS_MAX_RETRIES
 
 # Example with multiple sources and outputs
 # sources:

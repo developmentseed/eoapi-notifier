@@ -7,29 +7,12 @@ metadata:
 data:
   config.yaml: |
     # eoAPI Notifier Configuration
+    # Environment variables automatically override config values (e.g., HOST env var overrides host config)
     sources:
     {{- range .Values.config.sources}}
       - type: {{.type}}
         config:
-        {{- if eq .type "postgres"}}
-          host: {{.config.host}}
-          port: {{.config.port}}
-          database: {{.config.database}}
-          {{- if $.Values.secrets.postgresql.create}}
-          user: __POSTGRES_USERNAME__
-          password: __POSTGRES_PASSWORD__
-          {{- else}}
-          username: {{.config.username}}
-          password: {{.config.password}}
-          {{- end}}
-          {{- range $key, $value := .config}}
-          {{- if not (or (eq $key "host") (eq $key "port") (eq $key "database") (eq $key "user") (eq $key "username") (eq $key "password"))}}
-          {{$key}}: {{$value}}
-          {{- end}}
-          {{- end}}
-        {{- else}}
           {{- toYaml .config | nindent 10}}
-        {{- end}}
     {{- end}}
 
     outputs:

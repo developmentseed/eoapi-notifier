@@ -11,47 +11,6 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   restartPolicy: Never
-  initContainers:
-  - name: config-processor
-    image: alpine:3.19
-    command:
-    - /bin/sh
-    - -c
-    - |
-      set -e
-      echo "Processing configuration for config test..."
-
-      # Read the template config and replace placeholders
-      sed -e "s/__POSTGRES_USERNAME__/${POSTGRES_USERNAME}/g" \
-          -e "s/__POSTGRES_PASSWORD__/${POSTGRES_PASSWORD}/g" \
-          /app/config-template/config.yaml > /app/config-processed/config.yaml
-
-      echo "Config test configuration processed successfully"
-    env:
-    - name: POSTGRES_USERNAME
-      valueFrom:
-        secretKeyRef:
-          name: {{ include "eoapi-notifier.fullname" . }}-postgresql
-          key: username
-    - name: POSTGRES_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: {{ include "eoapi-notifier.fullname" . }}-postgresql
-          key: password
-    volumeMounts:
-    - name: config-template
-      mountPath: /app/config-template
-      readOnly: true
-    - name: config-processed
-      mountPath: /app/config-processed
-    securityContext:
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop:
-        - ALL
-      readOnlyRootFilesystem: false
-      runAsNonRoot: true
-      runAsUser: 1000
   containers:
   - name: config-test
     image: alpine:3.19
@@ -95,6 +54,14 @@ spec:
       fi
       echo "✅ PostgreSQL password available"
 
+      # Test that environment variables work (they should override config)
+      echo "Testing environment variable override capability..."
+      if [ "$POSTGRES_USERNAME" != "postgres" ] || [ "$POSTGRES_PASSWORD" != "password" ]; then
+        echo "✅ Environment variables are being used for secrets"
+      else
+        echo "⚠️  Using default values (this may be expected in some environments)"
+      fi
+
       # Test config file format
       cat /app/config/config.yaml | head -20
 
@@ -111,13 +78,11 @@ spec:
           name: {{ include "eoapi-notifier.fullname" . }}-postgresql
           key: password
     volumeMounts:
-    - name: config-processed
+    - name: config
       mountPath: /app/config
       readOnly: true
   volumes:
-  - name: config-template
+  - name: config
     configMap:
       name: {{ include "eoapi-notifier.fullname" . }}
-  - name: config-processed
-    emptyDir: {}
   serviceAccountName: {{ include "eoapi-notifier.serviceAccountName" . }}

@@ -20,57 +20,7 @@ spec:
       serviceAccountName: {{include "eoapi-notifier.serviceAccountName" .}}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8}}
-      initContainers:
-        - name: config-processor
-          image: alpine:3.19
-          command:
-            - /bin/sh
-            - -c
-            - |
-              set -e
-              echo "Processing configuration with environment variables..."
 
-              # Read the template config and replace placeholders
-              sed -e "s/__POSTGRES_USERNAME__/${POSTGRES_USERNAME}/g" \
-                  -e "s/__POSTGRES_PASSWORD__/${POSTGRES_PASSWORD}/g" \
-                  /app/config-template/config.yaml > /app/config-processed/config.yaml
-
-              echo "Configuration processed successfully"
-              cat /app/config-processed/config.yaml
-          env:
-            {{- if .Values.secrets.postgresql.create}}
-            - name: POSTGRES_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: {{include "eoapi-notifier.fullname" .}}-postgresql
-                  key: username
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{include "eoapi-notifier.fullname" .}}-postgresql
-                  key: password
-            {{- end}}
-          volumeMounts:
-            - name: config-template
-              mountPath: /app/config-template
-              readOnly: true
-            - name: config-processed
-              mountPath: /app/config-processed
-          resources:
-            limits:
-              cpu: 100m
-              memory: 64Mi
-            requests:
-              cpu: 10m
-              memory: 16Mi
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-              - ALL
-            readOnlyRootFilesystem: false
-            runAsNonRoot: true
-            runAsUser: 1000
       containers:
         - name: {{.Chart.Name}}
           securityContext:
@@ -88,20 +38,34 @@ spec:
           env:
             - name: UV_CACHE_DIR
               value: "/tmp"
+            {{- if .Values.secrets.postgresql.create }}
+            - name: POSTGRES_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "eoapi-notifier.fullname" . }}-postgresql
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "eoapi-notifier.fullname" . }}-postgresql
+                  key: password
+            {{- end }}
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12}}
           volumeMounts:
-            - name: config-processed
+            - name: config
               mountPath: /app/config
               readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
-        - name: config-template
+        - name: config
           configMap:
             name: {{include "eoapi-notifier.fullname" .}}
-        - name: config-processed
-          emptyDir: {}
         - name: tmp
           emptyDir: {}
       {{- with .Values.nodeSelector}}
