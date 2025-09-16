@@ -1,0 +1,24 @@
+{{- range $index, $output := .Values.config.outputs }}
+{{- if eq $output.type "cloudevents" }}
+---
+apiVersion: sources.knative.dev/v1
+kind: SinkBinding
+metadata:
+  name: {{ include "eoapi-notifier.fullname" $ }}-cloudevents-{{ $index }}
+  labels:
+    {{- include "eoapi-notifier.labels" $ | nindent 4 }}
+spec:
+  subject:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "eoapi-notifier.fullname" $ }}
+  sink:
+    ref:
+      apiVersion: {{ $output.config.destination.ref.apiVersion }}
+      kind: {{ $output.config.destination.ref.kind }}
+      name: {{ $output.config.destination.ref.name }}
+      {{- if $output.config.destination.ref.namespace }}
+      namespace: {{ $output.config.destination.ref.namespace }}
+      {{- end }}
+{{- end }}
+{{- end }}

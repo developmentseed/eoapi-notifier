@@ -59,10 +59,14 @@ config:
 
     - type: cloudevents
       config:
-        # Will be overridden by K_SINK from KNative SinkBinding
-        endpoint: https://example.com/webhook
-        source: /eoapi/stac
-        event_type: org.eoapi.stac
+        source: /eoapi/pgstac
+        event_type: org.eoapi.stac.item
+        destination:
+          ref:
+            apiVersion: messaging.knative.dev/v1
+            kind: Broker
+            name: my-channel-1
+            namespace: serverless
 
 # Secrets
 secrets:
@@ -91,5 +95,4 @@ env: {}
   # CLOUDEVENTS_SOURCE: /eoapi/stac/production
   # CLOUDEVENTS_EVENT_TYPE: org.eoapi.stac.item
   #
-  # KNative examples (typically set by SinkBinding):
-  # K_SINK: https://my-knative-service.default.svc.cluster.local
+  # KNative SinkBinding automatically sets K_SINK environment variable
