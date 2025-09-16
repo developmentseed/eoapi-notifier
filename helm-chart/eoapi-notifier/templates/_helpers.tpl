@@ -74,3 +74,4 @@ Return the proper image pull policy
 {{- define "eoapi-notifier.imagePullPolicy" -}}
 {{- .Values.image.pullPolicy | default "IfNotPresent" }}
 {{- end }}
+

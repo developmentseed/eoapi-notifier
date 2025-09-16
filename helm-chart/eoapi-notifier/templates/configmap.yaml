@@ -19,5 +19,10 @@ data:
     {{- range .Values.config.outputs}}
       - type: {{.type}}
         config:
+          {{- if eq .type "cloudevents"}}
+          {{- $config := omit .config "destination"}}
+          {{- toYaml $config | nindent 10}}
+          {{- else}}
           {{- toYaml .config | nindent 10}}
+          {{- end}}
     {{- end}}
