@@ -28,6 +28,7 @@ class CloudEventsConfig(BasePluginConfig):
     timeout: float = 30.0
     max_retries: int = 3
     retry_backoff: float = 1.0
+    max_header_length: int = 2048
 
     @field_validator("endpoint")
     @classmethod
@@ -53,6 +54,7 @@ class CloudEventsConfig(BasePluginConfig):
             "timeout": 30.0,
             "max_retries": 3,
             "retry_backoff": 1.0,
+            "max_header_length": 2048,
         }
 
     @classmethod
@@ -191,6 +193,16 @@ class CloudEventsAdapter(BaseOutput):
             )
             return False
 
+    def _truncate_header(self, value: str | None) -> str | None:
+        """Truncate header value to max_header_length if needed."""
+        if not value:
+            return value
+        if len(value.encode("utf-8")) <= self.config.max_header_length:
+            return value
+        # Truncate to byte limit, ensuring valid UTF-8
+        truncated = value.encode("utf-8")[: self.config.max_header_length]
+        return truncated.decode("utf-8", errors="ignore")
+
     def _convert_to_cloudevent(self, event: NotificationEvent) -> CloudEvent:
         """Convert NotificationEvent to CloudEvent."""
         # Use config values which now include environment overrides
@@ -211,11 +223,15 @@ class CloudEventsAdapter(BaseOutput):
 
         # Add subject if item_id exists
         if event.item_id:
-            attributes["subject"] = event.item_id
+            truncated_subject = self._truncate_header(event.item_id)
+            if truncated_subject:
+                attributes["subject"] = truncated_subject
 
         # Add collection attribute
         if event.collection:
-            attributes["collection"] = event.collection
+            truncated_collection = self._truncate_header(event.collection)
+            if truncated_collection:
+                attributes["collection"] = truncated_collection
 
         # Event data payload
         data = {

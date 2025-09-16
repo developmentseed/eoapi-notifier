@@ -34,6 +34,7 @@ class TestCloudEventsConfig:
         assert config.event_type == "org.eoapi.stac"
         assert config.timeout == 30.0
         assert config.max_retries == 3
+        assert config.max_header_length == 2048
 
     def test_endpoint_validation_error(self) -> None:
         """Test endpoint validation."""
@@ -197,6 +198,62 @@ class TestCloudEventsAdapter:
         assert cloud_event["type"] == "org.eoapi.stac.created"
         assert cloud_event["subject"] == "test-item"
         assert cloud_event["collection"] == "test-collection"
+
+    def test_truncate_header(self, adapter: CloudEventsAdapter) -> None:
+        """Test header value truncation."""
+        # Short string should not be truncated
+        short = "short-string"
+        assert adapter._truncate_header(short) == short
+
+        # None should remain None
+        assert adapter._truncate_header(None) is None
+
+        # Long string should be truncated to max_header_length bytes
+        long_string = "a" * 3000
+        truncated = adapter._truncate_header(long_string)
+        assert truncated is not None
+        assert len(truncated.encode("utf-8")) <= adapter.config.max_header_length
+        assert len(truncated) <= adapter.config.max_header_length
+
+        # UTF-8 multi-byte characters should be handled correctly
+        unicode_string = "测试" * 1000  # Chinese characters (3 bytes each)
+        truncated_unicode = adapter._truncate_header(unicode_string)
+        assert truncated_unicode is not None
+        assert (
+            len(truncated_unicode.encode("utf-8")) <= adapter.config.max_header_length
+        )
+        # Should not break in the middle of a character
+        assert truncated_unicode.encode("utf-8").decode("utf-8") == truncated_unicode
+
+    def test_convert_to_cloudevent_with_long_headers(
+        self, config: CloudEventsConfig
+    ) -> None:
+        """Test CloudEvent conversion with long header values."""
+        config.max_header_length = 50  # Small limit for testing
+        adapter = CloudEventsAdapter(config)
+
+        # Create event with long item_id and collection
+        event = NotificationEvent(
+            source="/test/source",
+            type="test.type",
+            operation="INSERT",
+            collection="a-very-long-collection-name-that-exceeds-the-limit",
+            item_id="a-very-long-item-id-that-also-exceeds-the-configured-limit",
+        )
+
+        cloud_event = adapter._convert_to_cloudevent(event)
+
+        # Check that long values are truncated in headers
+        assert "subject" in cloud_event
+        assert "collection" in cloud_event
+        assert len(cloud_event["subject"].encode("utf-8")) <= config.max_header_length
+        assert (
+            len(cloud_event["collection"].encode("utf-8")) <= config.max_header_length
+        )
+
+        # Original values should still be in data payload
+        assert cloud_event.data["item_id"] == event.item_id
+        assert cloud_event.data["collection"] == event.collection
 
     def test_operation_mapping(self, adapter: CloudEventsAdapter) -> None:
         """Test operation to event type mapping."""
