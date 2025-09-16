@@ -82,6 +82,7 @@ secrets:
 # KNative Support:
 # The cloudevents plugin supports K_SINK variables for KNative SinkBinding:
 # - K_SINK: Overrides CLOUDEVENTS_ENDPOINT (automatically set by SinkBinding)
+# - K_CE_OVERRIDE: A JSON object that specifies overrides to the outbound event.
 env: {}
   # Examples - Standard environment variables:
   # PGSTAC_HOST: postgresql-service

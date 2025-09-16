@@ -5,6 +5,7 @@ Sends notification events as CloudEvents via HTTP POST.
 Supports standard CloudEvents environment variables and KNative SinkBinding.
 """
 
+import json
 import os
 from typing import Any
 from uuid import uuid4
@@ -29,6 +30,7 @@ class CloudEventsConfig(BasePluginConfig):
     max_retries: int = 3
     retry_backoff: float = 1.0
     max_header_length: int = 4096
+    overrides: dict[str, str] = {}
 
     @field_validator("endpoint")
     @classmethod
@@ -42,6 +44,10 @@ class CloudEventsConfig(BasePluginConfig):
         """Apply KNative SinkBinding environment variables as special case."""
         if k_sink := os.getenv("K_SINK"):
             self.endpoint = k_sink
+
+        if k_ce_overrides := os.getenv("K_CE_OVERRIDES"):
+            overrides_data = json.loads(k_ce_overrides)
+            self.overrides = overrides_data.get("extensions", {})
 
         return self
 
@@ -209,6 +215,17 @@ class CloudEventsAdapter(BaseOutput):
         source = self.config.source
         event_type_base = self.config.event_type
 
+        # Apply KNative CE overrides if present
+        ce_extensions = {}
+        if k_ce_overrides := os.getenv("K_CE_OVERRIDES"):
+            try:
+                overrides_data = json.loads(k_ce_overrides)
+                ce_extensions = overrides_data.get("extensions", {})
+            except json.JSONDecodeError:
+                self.logger.warning(
+                    "Invalid K_CE_OVERRIDES JSON, ignoring: %s", k_ce_overrides
+                )
+
         # Map operation to event type suffix
         operation_map = {"INSERT": "created", "UPDATE": "updated", "DELETE": "deleted"}
         operation = operation_map.get(event.operation.upper(), event.operation.lower())
@@ -232,6 +249,10 @@ class CloudEventsAdapter(BaseOutput):
             truncated_collection = self._truncate_header(event.collection)
             if truncated_collection:
                 attributes["collection"] = truncated_collection
+
+        # Apply KNative CE extension overrides
+        for key, value in ce_extensions.items():
+            attributes[key] = str(value)
 
         # Event data payload
         data = {
