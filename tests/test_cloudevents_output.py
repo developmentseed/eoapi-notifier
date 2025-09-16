@@ -198,23 +198,6 @@ class TestCloudEventsAdapter:
         assert cloud_event["subject"] == "test-item"
         assert cloud_event["collection"] == "test-collection"
 
-    @patch.dict(
-        os.environ,
-        {
-            "K_SOURCE": "/custom/source",
-            "K_TYPE": "custom.type",
-        },
-    )
-    def test_convert_with_env_vars(self, sample_event: NotificationEvent) -> None:
-        """Test CloudEvent conversion with environment variables."""
-        # Create a new config and adapter after setting environment variables
-        config = CloudEventsConfig()
-        adapter = CloudEventsAdapter(config)
-        cloud_event = adapter._convert_to_cloudevent(sample_event)
-
-        assert cloud_event["source"] == "/custom/source"
-        assert cloud_event["type"] == "custom.type.created"
-
     def test_operation_mapping(self, adapter: CloudEventsAdapter) -> None:
         """Test operation to event type mapping."""
         test_cases = [

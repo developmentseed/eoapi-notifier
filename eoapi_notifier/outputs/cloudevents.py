@@ -5,7 +5,6 @@ Sends notification events as CloudEvents via HTTP POST.
 Supports standard CloudEvents environment variables and KNative SinkBinding.
 """
 
-import json
 import os
 from typing import Any
 from uuid import uuid4
@@ -40,17 +39,8 @@ class CloudEventsConfig(BasePluginConfig):
     @model_validator(mode="after")
     def apply_knative_overrides(self) -> "CloudEventsConfig":
         """Apply KNative SinkBinding environment variables as special case."""
-        # K_SINK overrides endpoint (KNative SinkBinding)
         if k_sink := os.getenv("K_SINK"):
             self.endpoint = k_sink
-
-        # K_SOURCE overrides source
-        if k_source := os.getenv("K_SOURCE"):
-            self.source = k_source
-
-        # K_TYPE overrides event_type
-        if k_type := os.getenv("K_TYPE"):
-            self.event_type = k_type
 
         return self
 
@@ -207,16 +197,6 @@ class CloudEventsAdapter(BaseOutput):
         source = self.config.source
         event_type_base = self.config.event_type
 
-        # Apply KNative CE overrides if present
-        ce_overrides = {}
-        if k_ce_overrides := os.getenv("K_CE_OVERRIDES"):
-            try:
-                ce_overrides = json.loads(k_ce_overrides)
-            except json.JSONDecodeError:
-                self.logger.warning(
-                    "Invalid K_CE_OVERRIDES JSON, ignoring: %s", k_ce_overrides
-                )
-
         # Map operation to event type suffix
         operation_map = {"INSERT": "created", "UPDATE": "updated", "DELETE": "deleted"}
         operation = operation_map.get(event.operation.upper(), event.operation.lower())
@@ -236,9 +216,6 @@ class CloudEventsAdapter(BaseOutput):
         # Add collection attribute
         if event.collection:
             attributes["collection"] = event.collection
-
-        # Apply KNative CE overrides
-        attributes.update(ce_overrides)
 
         # Event data payload
         data = {

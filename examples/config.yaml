@@ -55,8 +55,8 @@ outputs:
       endpoint: https://example.com/webhook  # CLOUDEVENTS_ENDPOINT or K_SINK
 
       # Optional: CloudEventattributes
-      # source: "/eoapi/stac"               # CLOUDEVENTS_SOURCE or K_SOURCE
-      # event_type: "org.eoapi.stac"        # CLOUDEVENTS_EVENT_TYPE or K_TYPE
+      # source: "/eoapi/stac"               # CLOUDEVENTS_SOURCE
+      # event_type: "org.eoapi.stac"        # CLOUDEVENTS_EVENT_TYPE
 
       # Optional: HTTP settings
       # timeout: 30.0                       # CLOUDEVENTS_TIMEOUT

@@ -78,24 +78,6 @@ secrets:
 # KNative Support:
 # The cloudevents plugin supports K_SINK variables for KNative SinkBinding:
 # - K_SINK: Overrides CLOUDEVENTS_ENDPOINT (automatically set by SinkBinding)
-# - K_SOURCE: Overrides CLOUDEVENTS_SOURCE
-# - K_TYPE: Overrides CLOUDEVENTS_EVENT_TYPE
-#
-# For KNative integration, use SinkBinding to automatically inject K_SINK:
-#   apiVersion: sources.knative.dev/v1beta1
-#   kind: SinkBinding
-#   metadata:
-#     name: eoapi-notifier-binding
-#   spec:
-#     subject:
-#       apiVersion: apps/v1
-#       kind: Deployment
-#       name: eoapi-notifier
-#     sink:
-#       ref:
-#         apiVersion: serving.knative.dev/v1
-#         kind: Service
-#         name: my-knative-service
 env: {}
   # Examples - Standard environment variables:
   # PGSTAC_HOST: postgresql-service
@@ -111,5 +93,3 @@ env: {}
   #
   # KNative examples (typically set by SinkBinding):
   # K_SINK: https://my-knative-service.default.svc.cluster.local
-  # K_SOURCE: /eoapi/stac/pgstac
-  # K_TYPE: org.eoapi.stac
