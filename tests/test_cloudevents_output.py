@@ -34,7 +34,7 @@ class TestCloudEventsConfig:
         assert config.event_type == "org.eoapi.stac"
         assert config.timeout == 30.0
         assert config.max_retries == 3
-        assert config.max_header_length == 2048
+        assert config.max_header_length == 4096
 
     def test_endpoint_validation_error(self) -> None:
         """Test endpoint validation."""

@@ -28,7 +28,7 @@ class CloudEventsConfig(BasePluginConfig):
     timeout: float = 30.0
     max_retries: int = 3
     retry_backoff: float = 1.0
-    max_header_length: int = 2048
+    max_header_length: int = 4096
 
     @field_validator("endpoint")
     @classmethod
@@ -54,7 +54,7 @@ class CloudEventsConfig(BasePluginConfig):
             "timeout": 30.0,
             "max_retries": 3,
             "retry_backoff": 1.0,
-            "max_header_length": 2048,
+            "max_header_length": 4096,
         }
 
     @classmethod
