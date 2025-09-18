@@ -94,6 +94,26 @@ class CloudEventsAdapter(BaseOutput):
         super().__init__(config)
         self.config: CloudEventsConfig = config
         self._client: httpx.AsyncClient | None = None
+        # Parse K_CE_OVERRIDES once during initialization
+        self._ce_extensions = self._parse_k_ce_overrides()
+
+    def _parse_k_ce_overrides(self) -> dict[str, str]:
+        """Parse K_CE_OVERRIDES environment variable once during initialization."""
+        k_ce_overrides = os.getenv("K_CE_OVERRIDES")
+        if not k_ce_overrides:
+            return {}
+
+        try:
+            overrides_data = json.loads(k_ce_overrides)
+            extensions = overrides_data.get("extensions", {})
+            if isinstance(extensions, dict):
+                return {str(k): str(v) for k, v in extensions.items()}
+            return {}
+        except json.JSONDecodeError:
+            self.logger.warning(
+                "Invalid K_CE_OVERRIDES JSON, ignoring: %s", k_ce_overrides
+            )
+            return {}
 
     async def start(self) -> None:
         """Start the HTTP client."""
@@ -215,16 +235,8 @@ class CloudEventsAdapter(BaseOutput):
         source = self.config.source
         event_type_base = self.config.event_type
 
-        # Apply KNative CE overrides if present
-        ce_extensions = {}
-        if k_ce_overrides := os.getenv("K_CE_OVERRIDES"):
-            try:
-                overrides_data = json.loads(k_ce_overrides)
-                ce_extensions = overrides_data.get("extensions", {})
-            except json.JSONDecodeError:
-                self.logger.warning(
-                    "Invalid K_CE_OVERRIDES JSON, ignoring: %s", k_ce_overrides
-                )
+        # Use pre-parsed KNative CE overrides
+        ce_extensions = self._ce_extensions
 
         # Map operation to event type suffix
         operation_map = {"INSERT": "created", "UPDATE": "updated", "DELETE": "deleted"}
