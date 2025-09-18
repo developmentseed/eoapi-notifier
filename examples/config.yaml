@@ -61,6 +61,7 @@ outputs:
       # Optional: HTTP settings
       # timeout: 30.0                       # CLOUDEVENTS_TIMEOUT
       # max_retries: 3                      # CLOUDEVENTS_MAX_RETRIES
+      # max_header_length: 4096             # CLOUDEVENTS_MAX_HEADER_LENGTH
 
 # Example with multiple sources and outputs
 # sources:
