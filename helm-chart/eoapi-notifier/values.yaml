@@ -42,58 +42,49 @@ affinity: {}
 # Application configuration
 config:
   logLevel: INFO
-  sources:
-    - type: postgres
-      config:
-        host: postgresql
-        port: 5432
-        database: postgis
-        username: postgres
-        password: password
 
+  # Sources: Define where notifications come from
+  sources:
+    - type: pgstac
+      config:
+        # Database connection from existing Kubernetes secret
+        connection:
+          existingSecret:
+            name: ""
+            keys:
+              username: "user"
+              password: "password"
+              host: "host"
+              port: "port"
+              database: "dbname"
+        # Optional pgSTAC settings:
+        # tables: ["items", "collections"]
+        # min_connections: 1
+        # max_connections: 10
+        # enable_correlation: true
+
+  # Outputs: Define where notifications are sent
   outputs:
     - type: mqtt
       config:
         broker_host: mqtt-broker
         broker_port: 1883
+        # Optional: username, password, use_tls, topic, qos
 
     - type: cloudevents
       config:
         source: /eoapi/pgstac
         event_type: org.eoapi.stac.item
+        # For KNative SinkBinding:
         destination:
           ref:
             apiVersion: messaging.knative.dev/v1
             kind: Broker
             name: my-channel-1
             namespace: serverless
+        # For HTTP endpoints, use: endpoint: https://webhook.example.com
 
-# Secrets
-secrets:
-  postgresql:
-    create: true
-    username: postgres
-    password: password
-
-# Environment variables
-# These will be injected as environment variables and automatically override config values
-# Use plugin-prefixed variables: PGSTAC_PASSWORD, MQTT_USERNAME, CLOUDEVENTS_ENDPOINT, etc
-#
-# KNative Support:
-# The cloudevents plugin supports K_SINK variables for KNative SinkBinding:
-# - K_SINK: Overrides CLOUDEVENTS_ENDPOINT (automatically set by SinkBinding)
-# - K_CE_OVERRIDE: A JSON object that specifies overrides to the outbound event.
+# Environment variables override config values with plugin prefixes
+# Examples: PGSTAC_PASSWORD, MQTT_USERNAME, CLOUDEVENTS_ENDPOINT
+# KNative: K_SINK automatically overrides CLOUDEVENTS_ENDPOINT
 env: {}
-  # Examples - Standard environment variables:
-  # PGSTAC_HOST: postgresql-service
-  # PGSTAC_PORT: "5432"
-  # PGSTAC_PASSWORD: secret-password
-  # MQTT_BROKER_HOST: mqtt-broker-service
-  # MQTT_USE_TLS: "true"
-  #
-  # CloudEvents examples:
-  # CLOUDEVENTS_ENDPOINT: https://my-webhook-url
-  # CLOUDEVENTS_SOURCE: /eoapi/stac/production
-  # CLOUDEVENTS_EVENT_TYPE: org.eoapi.stac.item
-  #
-  # KNative SinkBinding automatically sets K_SINK environment variable

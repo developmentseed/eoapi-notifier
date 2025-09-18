@@ -13,7 +13,7 @@ spec:
     metadata:
       annotations:
         checksum/config: {{include (print $.Template.BasePath "/configmap.yaml") . | sha256sum}}
-        checksum/secret: {{include (print $.Template.BasePath "/secret-postgresql.yaml") . | sha256sum}}
+
       labels:
         {{- include "eoapi-notifier.selectorLabels" . | nindent 8}}
     spec:
@@ -38,17 +38,35 @@ spec:
           env:
             - name: UV_CACHE_DIR
               value: "/tmp"
-            {{- if .Values.secrets.postgresql.create }}
-            - name: POSTGRES_USERNAME
+            {{- range $source := .Values.config.sources }}
+            {{- if and (eq $source.type "pgstac") $source.config.connection.existingSecret.name }}
+            {{- $secret := $source.config.connection.existingSecret }}
+            - name: PGSTAC_HOST
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "eoapi-notifier.fullname" . }}-postgresql
-                  key: username
-            - name: POSTGRES_PASSWORD
+                  name: {{ $secret.name }}
+                  key: {{ $secret.keys.host }}
+            - name: PGSTAC_PORT
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "eoapi-notifier.fullname" . }}-postgresql
-                  key: password
+                  name: {{ $secret.name }}
+                  key: {{ $secret.keys.port }}
+            - name: PGSTAC_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret.name }}
+                  key: {{ $secret.keys.database }}
+            - name: PGSTAC_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret.name }}
+                  key: {{ $secret.keys.username }}
+            - name: PGSTAC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret.name }}
+                  key: {{ $secret.keys.password }}
+            {{- end }}
             {{- end }}
             {{- range $key, $value := .Values.env }}
             - name: {{ $key }}

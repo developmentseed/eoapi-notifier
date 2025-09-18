@@ -20,13 +20,17 @@ helm install eoapi-notifier oci://ghcr.io/developmentseed/charts/eoapi-notifier 
 ```yaml
 config:
   sources:
-    - type: postgres
+    - type: pgstac
       config:
-        host: postgresql
-        port: 5432
-        database: postgis
-        username: postgres
-        password: password
+        connection:
+          existingSecret:
+            name: "postgresql-credentials"
+            keys:
+              username: "user"
+              password: "password"
+              host: "host"
+              port: "port"
+              database: "dbname"
 
   outputs:
     - type: mqtt
@@ -45,11 +49,8 @@ config:
             name: my-channel-1
             namespace: serverless
 
-secrets:
-  postgresql:
-    create: true
-    username: postgres
-    password: password
+# Connection credentials should be provided via existing Kubernetes secrets
+# Referenced in sources[].config.connection.existingSecret
 
 resources:
   limits:
