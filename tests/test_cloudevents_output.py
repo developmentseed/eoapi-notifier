@@ -54,6 +54,29 @@ class TestCloudEventsConfig:
         config = CloudEventsConfig(endpoint="https://example.com/webhook")
         assert "POST https://example.com/webhook" in config.get_connection_info()
 
+    @patch.dict(
+        os.environ,
+        {"K_CE_OVERRIDES": '{"extensions": {"extra": "test", "num": 42}}'},
+    )
+    def test_k_ce_overrides_valid(self) -> None:
+        """Test K_CE_OVERRIDES with valid extensions."""
+        config = CloudEventsConfig()
+        assert config.overrides == {"extra": "test", "num": 42}
+
+    @patch.dict(os.environ, {"K_CE_OVERRIDES": '{"other": "field"}'})
+    def test_k_ce_overrides_no_extensions(self) -> None:
+        """Test K_CE_OVERRIDES without extensions field."""
+        config = CloudEventsConfig()
+        assert config.overrides == {}
+
+    @patch.dict(os.environ, {"K_CE_OVERRIDES": "invalid-json"})
+    def test_k_ce_overrides_invalid_json(self) -> None:
+        """Test K_CE_OVERRIDES with invalid JSON."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            CloudEventsConfig()
+
 
 class TestCloudEventsAdapter:
     """Test CloudEvents output adapter."""
@@ -286,3 +309,60 @@ class TestCloudEventsAdapter:
         # Running with client
         adapter._client = MagicMock()
         assert await adapter.health_check() is True
+
+    @patch.dict(
+        os.environ,
+        {
+            "K_CE_OVERRIDES": (
+                '{"extensions": {"extra": "test-value", "priority": "high"}}'
+            )
+        },
+    )
+    def test_convert_to_cloudevent_with_overrides(
+        self, config: CloudEventsConfig, sample_event: NotificationEvent
+    ) -> None:
+        """Test CloudEvent conversion with K_CE_OVERRIDES."""
+        # Create adapter after environment variable is set
+        adapter = CloudEventsAdapter(config)
+        cloud_event = adapter._convert_to_cloudevent(sample_event)
+
+        assert isinstance(cloud_event, CloudEvent)
+        assert cloud_event["extra"] == "test-value"
+        assert cloud_event["priority"] == "high"
+
+    @patch.dict(os.environ, {"K_CE_OVERRIDES": '{"extensions": {"number": 123}}'})
+    def test_convert_to_cloudevent_with_number_override(
+        self, config: CloudEventsConfig, sample_event: NotificationEvent
+    ) -> None:
+        """Test CloudEvent conversion with number in K_CE_OVERRIDES."""
+        # Create adapter after environment variable is set
+        adapter = CloudEventsAdapter(config)
+        cloud_event = adapter._convert_to_cloudevent(sample_event)
+
+        assert cloud_event["number"] == "123"  # Should be converted to string
+
+    @patch.dict(os.environ, {"K_CE_OVERRIDES": "invalid-json"})
+    def test_convert_to_cloudevent_invalid_overrides(
+        self, config: CloudEventsConfig, sample_event: NotificationEvent
+    ) -> None:
+        """Test CloudEvent conversion with invalid K_CE_OVERRIDES JSON."""
+        # Create adapter after environment variable is set
+        adapter = CloudEventsAdapter(config)
+        cloud_event = adapter._convert_to_cloudevent(sample_event)
+
+        # Should work normally without overrides
+        assert isinstance(cloud_event, CloudEvent)
+        assert cloud_event["source"] == "/eoapi/stac"
+
+    @patch.dict(os.environ, {"K_CE_OVERRIDES": '{"other": "field"}'})
+    def test_convert_to_cloudevent_no_extensions(
+        self, config: CloudEventsConfig, sample_event: NotificationEvent
+    ) -> None:
+        """Test CloudEvent conversion with K_CE_OVERRIDES but no extensions field."""
+        # Create adapter after environment variable is set
+        adapter = CloudEventsAdapter(config)
+        cloud_event = adapter._convert_to_cloudevent(sample_event)
+
+        # Should work normally without extensions
+        assert isinstance(cloud_event, CloudEvent)
+        assert cloud_event["source"] == "/eoapi/stac"

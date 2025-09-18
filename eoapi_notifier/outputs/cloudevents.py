@@ -5,6 +5,7 @@ Sends notification events as CloudEvents via HTTP POST.
 Supports standard CloudEvents environment variables and KNative SinkBinding.
 """
 
+import json
 import os
 from typing import Any
 from uuid import uuid4
@@ -29,6 +30,7 @@ class CloudEventsConfig(BasePluginConfig):
     max_retries: int = 3
     retry_backoff: float = 1.0
     max_header_length: int = 4096
+    overrides: dict[str, str] = {}
 
     @field_validator("endpoint")
     @classmethod
@@ -42,6 +44,10 @@ class CloudEventsConfig(BasePluginConfig):
         """Apply KNative SinkBinding environment variables as special case."""
         if k_sink := os.getenv("K_SINK"):
             self.endpoint = k_sink
+
+        if k_ce_overrides := os.getenv("K_CE_OVERRIDES"):
+            overrides_data = json.loads(k_ce_overrides)
+            self.overrides = overrides_data.get("extensions", {})
 
         return self
 
@@ -88,6 +94,26 @@ class CloudEventsAdapter(BaseOutput):
         super().__init__(config)
         self.config: CloudEventsConfig = config
         self._client: httpx.AsyncClient | None = None
+        # Parse K_CE_OVERRIDES once during initialization
+        self._ce_extensions = self._parse_k_ce_overrides()
+
+    def _parse_k_ce_overrides(self) -> dict[str, str]:
+        """Parse K_CE_OVERRIDES environment variable once during initialization."""
+        k_ce_overrides = os.getenv("K_CE_OVERRIDES")
+        if not k_ce_overrides:
+            return {}
+
+        try:
+            overrides_data = json.loads(k_ce_overrides)
+            extensions = overrides_data.get("extensions", {})
+            if isinstance(extensions, dict):
+                return {str(k): str(v) for k, v in extensions.items()}
+            return {}
+        except json.JSONDecodeError:
+            self.logger.warning(
+                "Invalid K_CE_OVERRIDES JSON, ignoring: %s", k_ce_overrides
+            )
+            return {}
 
     async def start(self) -> None:
         """Start the HTTP client."""
@@ -209,6 +235,9 @@ class CloudEventsAdapter(BaseOutput):
         source = self.config.source
         event_type_base = self.config.event_type
 
+        # Use pre-parsed KNative CE overrides
+        ce_extensions = self._ce_extensions
+
         # Map operation to event type suffix
         operation_map = {"INSERT": "created", "UPDATE": "updated", "DELETE": "deleted"}
         operation = operation_map.get(event.operation.upper(), event.operation.lower())
@@ -232,6 +261,10 @@ class CloudEventsAdapter(BaseOutput):
             truncated_collection = self._truncate_header(event.collection)
             if truncated_collection:
                 attributes["collection"] = truncated_collection
+
+        # Apply KNative CE extension overrides
+        for key, value in ce_extensions.items():
+            attributes[key] = str(value)
 
         # Event data payload
         data = {
