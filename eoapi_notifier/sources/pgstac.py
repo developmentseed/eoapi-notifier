@@ -488,9 +488,8 @@ class PgSTACSource(BaseSource):
 
         correlation_mode = "with correlation" if self._correlator else "raw events only"
         self.logger.info(
-            "Starting pgSTAC source (%s): %s",
-            correlation_mode,
-            self.config.get_connection_info(),
+            f"Starting pgSTAC source ({correlation_mode}): "
+            f"{self.config.get_connection_info()}"
         )
 
         self.logger.debug("Step 1: Establishing database connection...")
@@ -559,10 +558,8 @@ class PgSTACSource(BaseSource):
             self._current_delay = self.config.reconnect_delay
 
             self.logger.info(
-                "✓ Connected to pgSTAC database at %s:%s/%s",
-                self.config.host,
-                self.config.port,
-                self.config.database,
+                f"✓ Connected to pgSTAC database at "
+                f"{self.config.host}:{self.config.port}/{self.config.database}"
             )
 
         except Exception as e:
@@ -613,7 +610,7 @@ class PgSTACSource(BaseSource):
             self.config.channel, self._handle_notification
         )
 
-        self.logger.info("✓ Listening on channel: %s", self.config.channel)
+        self.logger.info(f"✓ Listening on channel: {self.config.channel}")
 
     async def _cleanup_connection(self) -> None:
         """Clean up database connection and listener."""
@@ -703,7 +700,11 @@ class PgSTACSource(BaseSource):
                 )
 
     def _handle_notification(
-        self, connection: asyncpg.Connection, pid: int, channel: str, payload: str
+        self,
+        connection: asyncpg.Connection,
+        pid: int,
+        channel: str,
+        payload: str,
     ) -> None:
         """Handle incoming PostgreSQL notification."""
         self.logger.debug(
@@ -782,7 +783,9 @@ class PgSTACSource(BaseSource):
 
         except (json.JSONDecodeError, KeyError) as e:
             self.logger.error(
-                "✗ Invalid notification payload: %s - payload was: %s", e, payload
+                "✗ Invalid notification payload: %s - payload was: %s",
+                e,
+                payload,
             )
             return None
 
@@ -796,7 +799,9 @@ class PgSTACSource(BaseSource):
                 event = await asyncio.wait_for(self._event_queue.get(), timeout=1.0)
                 event_stream_count += 1
                 self.logger.debug(
-                    "Streaming event #%d from queue: %s", event_stream_count, event.id
+                    "Streaming event #%d from queue: %s",
+                    event_stream_count,
+                    event.id,
                 )
                 yield event
             except TimeoutError:

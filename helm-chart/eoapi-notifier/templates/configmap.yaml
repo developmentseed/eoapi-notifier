@@ -12,16 +12,7 @@ data:
     {{- range .Values.config.sources}}
       - type: {{.type}}
         config:
-          {{- if eq .type "pgstac"}}
-          # Connection details provided via environment variables
-          host: localhost
-          port: 5432
-          database: postgis
-          user: postgres
-          password: password
-          {{- else}}
           {{- toYaml .config | nindent 10}}
-          {{- end}}
     {{- end}}
 
     outputs:

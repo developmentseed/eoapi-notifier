@@ -58,6 +58,7 @@ config:
               port: "port"
               database: "dbname"
         # Optional pgSTAC settings:
+        # channel: "pgstac_items_change"  # Default: "pgstac_items"
         # tables: ["items", "collections"]
         # min_connections: 1
         # max_connections: 10
