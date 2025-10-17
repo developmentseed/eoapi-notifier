@@ -346,7 +346,7 @@ class PgSTACSourceConfig(BasePluginConfig):
     user: str = "postgres"
     password: str = ""
 
-    channel: str = "pgstac_items"
+    channel: str = "pgstac_items_change"
     tables: list[str] | None = None
 
     max_reconnect_attempts: int = -1  # -1 for infinite
@@ -398,7 +398,7 @@ class PgSTACSourceConfig(BasePluginConfig):
             "database": "pgstac",
             "user": "postgres",
             "password": "your-password",
-            "channel": "pgstac_items",
+            "channel": "pgstac_items_change",
             "max_reconnect_attempts": -1,
             "reconnect_delay": 5.0,
             "enable_correlation": True,
