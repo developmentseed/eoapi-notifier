@@ -12,7 +12,12 @@ data:
     {{- range .Values.config.sources}}
       - type: {{.type}}
         config:
+          {{- if and (eq .type "pgstac") .config.connection.existingSecret}}
+          {{- $config := omit .config "connection"}}
+          {{- toYaml $config | nindent 10}}
+          {{- else}}
           {{- toYaml .config | nindent 10}}
+          {{- end}}
     {{- end}}
 
     outputs:

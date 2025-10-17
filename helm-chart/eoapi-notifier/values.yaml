@@ -57,6 +57,14 @@ config:
               host: "host"
               port: "port"
               database: "dbname"
+
+        # Alternative: Direct connection config (less secure for passwords)
+        # host: "localhost"
+        # port: 5432
+        # database: "pgstac"
+        # user: "postgres"
+        # password: "your-password"
+
         # Optional pgSTAC settings:
         # channel: "pgstac_items_change"
         # tables: ["items", "collections"]
