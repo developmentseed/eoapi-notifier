@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "eoapi-notifier"
-version = "0.0.6"
+version = "0.0.7"
 description = "Message handler for eoAPI components"
 requires-python = ">=3.12"
 authors = [
