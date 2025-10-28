@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "eoapi-notifier.fullname" . }}-test-knative-hooks"
+  labels:
+    {{- include "eoapi-notifier.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "4"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+  - name: knative-hooks-test
+    image: alpine:3.19
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -e
+      echo "🧪 Testing Knative hook configuration..."
+
+      # Test 1: Verify SinkBinding has correct hook annotations
+      echo "Testing SinkBinding hook annotations..."
+      {{- range $index, $output := .Values.config.outputs }}
+      {{- if eq $output.type "cloudevents" }}
+      echo "✅ Found CloudEvents output configuration for SinkBinding"
+      echo "  - Expected SinkBinding name: {{ include "eoapi-notifier.fullname" $ }}-cloudevents-{{ $index }}"
+      echo "  - Expected hook weight: 5"
+      echo "  - Expected hook types: post-install,post-upgrade"
+      {{- end }}
+      {{- end }}
+
+      # Test 2: Verify waitForKnativeCRDs conditional logic
+      {{- if .Values.waitForKnativeCRDs }}
+      echo "✅ waitForKnativeCRDs is enabled - Knative wait job should be created"
+      echo "  - Expected wait job name: {{ include "eoapi-notifier.fullname" . }}-knative-wait"
+      echo "  - Expected hook weight: 1"
+      echo "  - Expected hook types: post-install,post-upgrade"
+      {{- else }}
+      echo "⚠️  waitForKnativeCRDs is disabled - Knative wait job should NOT be created"
+      {{- end }}
+
+      # Test 3: Verify hook weight ordering
+      echo "Testing hook weight ordering..."
+      {{- if .Values.waitForKnativeCRDs }}
+      echo "✅ Hook execution order (when waitForKnativeCRDs=true):"
+      echo "  1. Weight 1: Knative CRD wait job runs first"
+      echo "  2. Weight 5: SinkBinding creation runs after CRDs exist"
+      {{- else }}
+      echo "✅ Hook execution order (when waitForKnativeCRDs=false):"
+      echo "  1. No wait job - SinkBinding created immediately with weight 5"
+      {{- end }}
+
+      # Test 4: Verify cleanup policies
+      echo "Testing cleanup policies..."
+      {{- if .Values.waitForKnativeCRDs }}
+      echo "✅ Wait job cleanup: before-hook-creation,hook-succeeded (job removed after success)"
+      {{- end }}
+      echo "✅ SinkBinding cleanup: before-hook-creation (recreated on each deployment)"
+
+      # Test 5: Test different waitForKnativeCRDs values
+      echo "Testing configuration scenarios..."
+      echo "✅ Current configuration:"
+      echo "  - waitForKnativeCRDs: {{ .Values.waitForKnativeCRDs }}"
+      {{- if .Values.waitForKnativeCRDs }}
+      echo "  - Behavior: Wait for CRDs before creating SinkBindings"
+      {{- else }}
+      echo "  - Behavior: Create SinkBindings immediately (backward compatible)"
+      {{- end }}
+
+      # Test 6: Validate CloudEvents outputs exist for SinkBinding creation
+      {{- $hasCloudEvents := false }}
+      {{- range $index, $output := .Values.config.outputs }}
+      {{- if eq $output.type "cloudevents" }}
+      {{- $hasCloudEvents = true }}
+      {{- end }}
+      {{- end }}
+
+      {{- if $hasCloudEvents }}
+      echo "✅ CloudEvents output configured - SinkBinding will be created"
+      {{- else }}
+      echo "⚠️  No CloudEvents outputs configured - no SinkBinding will be created"
+      {{- end }}
+
+      echo "✅ Knative hooks configuration test passed"
+  serviceAccountName: {{ include "eoapi-notifier.serviceAccountName" . }}

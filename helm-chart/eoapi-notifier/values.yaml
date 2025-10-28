@@ -39,6 +39,9 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
+# Whether to wait for Knative CRDs before creating SinkBindings
+waitForKnativeCRDs: false
+
 # Application configuration
 config:
   logLevel: INFO

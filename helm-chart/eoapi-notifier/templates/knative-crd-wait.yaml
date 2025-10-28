@@ -1,0 +1,45 @@
+{{- if .Values.waitForKnativeCRDs -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "eoapi-notifier.fullname" . }}-knative-wait
+  labels:
+    {{- include "eoapi-notifier.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: "post-install,post-upgrade"
+    helm.sh/hook-weight: "1"
+    helm.sh/hook-delete-policy: "before-hook-creation,hook-succeeded"
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: wait-for-crds
+        image: bitnami/kubectl:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "Waiting for Knative CRDs..."
+          for crd in sinkbindings.sources.knative.dev services.serving.knative.dev; do
+            echo "Checking $crd..."
+            timeout=300
+            counter=0
+            while [ $counter -lt $timeout ]; do
+              if kubectl get crd "$crd" >/dev/null 2>&1; then
+                echo "✅ $crd ready"
+                break
+              fi
+              sleep 5
+              counter=$((counter + 5))
+            done
+            if [ $counter -ge $timeout ]; then
+              echo "❌ Timeout waiting for $crd"
+              exit 1
+            fi
+          done
+          echo "✅ All Knative CRDs ready"
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+{{- end }}
