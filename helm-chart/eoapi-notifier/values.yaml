@@ -10,8 +10,10 @@ nameOverride: ""
 fullnameOverride: ""
 
 serviceAccount:
-  create: true
+  # Allow parent chart to override the service account name
   name: ""
+  # When name is provided, use it instead of creating a new one
+  create: true
 
 podSecurityContext:
   fsGroup: 1000

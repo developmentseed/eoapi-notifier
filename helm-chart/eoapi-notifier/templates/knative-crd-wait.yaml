@@ -12,6 +12,7 @@ metadata:
 spec:
   template:
     spec:
+      serviceAccountName: {{ .Values.serviceAccount.name | default (include "eoapi-notifier.serviceAccountName" .) }}
       restartPolicy: Never
       containers:
       - name: wait-for-crds

@@ -61,6 +61,28 @@ resources:
     memory: 128Mi
 ```
 
+## Service Account Configuration
+
+The chart supports using a custom service account, which is useful when deploying as a subchart:
+
+```yaml
+serviceAccount:
+  # Allow parent chart to override the service account name
+  name: ""
+  # When name is provided, use it instead of creating a new one
+  create: true
+```
+
+### Usage in Parent Chart
+
+```yaml
+# charts/eoapi/values.yaml
+eoapi-notifier:
+  serviceAccount:
+    name: eoapi  # Use the parent chart's service account
+    create: false
+```
+
 ## KNative SinkBinding Support
 
 The chart automatically creates KNative SinkBinding resources for CloudEvents outputs, resolving object references to URLs via the `K_SINK` environment variable.
