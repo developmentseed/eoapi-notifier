@@ -2,8 +2,8 @@ apiVersion: v2
 name: eoapi-notifier
 description: A Helm chart for eoAPI Notifier - Message handler for eoAPI components
 type: application
-version: 0.0.8
-appVersion: "0.0.8"
+version: 0.0.9
+appVersion: "0.0.9"
 home: https://github.com/developmentseed/eoapi-notifier
 sources:
   - https://github.com/developmentseed/eoapi-notifier
