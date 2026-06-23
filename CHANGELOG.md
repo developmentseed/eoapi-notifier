@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 (2026-06-23)
+
+## What's Changed
+* ci: pin GitHub Actions to SHA digests (fix zizmor unpinned-uses) by @lhoupert in https://github.com/developmentseed/eoapi-notifier/pull/5
+
+
+**Full Changelog**: https://github.com/developmentseed/eoapi-notifier/compare/0.1.0...0.1.1
+
 ## 0.1.0 (2026-06-23)
 
 ## What's Changed
