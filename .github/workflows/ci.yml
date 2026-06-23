@@ -54,7 +54,7 @@ jobs:
           key: ${{ runner.os }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
 
       - name: Install dependencies
-        run: uv sync --extra dev --extra test
+        run: uv sync --frozen --extra dev --extra test
 
       - name: Run code quality checks
         run: |
@@ -79,7 +79,7 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies
-        run: uv sync --extra dev --extra test
+        run: uv sync --frozen --extra dev --extra test
 
       - name: Run tests with coverage
         run: |

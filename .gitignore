@@ -46,7 +46,6 @@ coverage.xml
 *.cover
 
 # uv
-uv.lock
 
 # Claude
 CLAUDE.md

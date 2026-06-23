@@ -17,7 +17,7 @@ dependencies = [
     "click>=8.2.1",
     "asyncpg>=0.30.0",
     "paho-mqtt>=2.1.0",
-    "cloudevents>=1.10.0",
+    "cloudevents>=1.10.0,<2",
     "httpx>=0.25.0",
     "pypgstac[psycopg]>=0.9.8",
 ]
