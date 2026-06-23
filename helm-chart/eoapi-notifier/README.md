@@ -1,6 +1,6 @@
 # eoAPI Notifier Helm Chart
 
-Helm chart for eoAPI Notifier - message handler for PostgreSQL/pgSTAC to MQTT.
+Helm chart for eoAPI Notifier — forwards PostgreSQL/pgSTAC change notifications to MQTT and/or CloudEvents outputs.
 
 ## Installation
 
@@ -41,13 +41,18 @@ config:
     - type: cloudevents
       config:
         source: /eoapi/pgstac
-        event_type: org.eoapi.stac.item
         destination:
           ref:
             apiVersion: messaging.knative.dev/v1
             kind: Broker
             name: my-channel-1
             namespace: serverless
+
+  # Optional: filter events before forwarding (OR across blocks)
+  # filters:
+  #   - collections: ["sentinel-2-l2a"]
+  #     operations: ["create", "replace"]
+  #     bbox: [-180, -90, 180, 90]
 
 # Connection credentials should be provided via existing Kubernetes secrets
 # Referenced in sources[].config.connection.existingSecret
@@ -94,7 +99,6 @@ outputs:
   - type: cloudevents
     config:
       source: /eoapi/pgstac
-      event_type: org.eoapi.stac.item
       destination:
         ref:
           apiVersion: messaging.knative.dev/v1
@@ -102,3 +106,5 @@ outputs:
           name: my-broker
           namespace: default  # optional
 ```
+
+CloudEvent `type` values follow OGC PubSub (`org.ogc.api.collection.item.create`, etc.); they are derived from the pgSTAC operation, not from output config.

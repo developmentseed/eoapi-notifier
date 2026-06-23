@@ -1,0 +1,30 @@
+{
+  "specversion": "1.0",
+  "id": "pgstac-item-1",
+  "source": "/eoapi/stac",
+  "type": "org.ogc.api.collection.item.create",
+  "datacontenttype": "application/json",
+  "subject": "item-1",
+  "time": "2024-01-01T00:00:00+00:00",
+  "collection": "sentinel-2-l2a",
+  "data": {
+    "type": "Feature",
+    "id": "item-1",
+    "collection": "sentinel-2-l2a",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0]
+        ]
+      ]
+    },
+    "bbox": [0, 0, 1, 1],
+    "properties": {
+      "datetime": "2024-01-01T00:00:00Z"
+    }
+  }
+}

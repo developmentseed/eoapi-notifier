@@ -76,6 +76,13 @@ config:
         # min_connections: 1
         # max_connections: 10
         # enable_correlation: true
+        # include_geometry: true
+
+  # Optional: filter events before forwarding to outputs
+  # filters:
+  #   - collections: ["sentinel-2-l2a"]
+  #     operations: ["create", "replace"]
+  #     bbox: [-180, -90, 180, 90]
 
   # Outputs: Define where notifications are sent
   outputs:
@@ -88,7 +95,6 @@ config:
     - type: cloudevents
       config:
         source: /eoapi/pgstac
-        event_type: org.eoapi.stac.item
         # For KNative SinkBinding:
         destination:
           ref:

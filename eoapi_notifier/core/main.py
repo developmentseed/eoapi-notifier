@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 from loguru import logger
 
+from .filter import FilterConfig, matches, parse_filters
 from .registry import create_output, create_source
 
 
@@ -19,6 +20,7 @@ class NotifierApp:
         """Initialize the application."""
         self.sources: list[Any] = []
         self.outputs: list[Any] = []
+        self.filters: list[FilterConfig] = []
         self._shutdown_event = asyncio.Event()
         self._running = False
 
@@ -239,6 +241,10 @@ class NotifierApp:
                     f"Received event #{event_count} from {source_name}: {event}"
                 )
 
+                if not matches(event, self.filters):
+                    logger.debug(f"Event {event.id} filtered out")
+                    continue
+
                 # Send event to all outputs
                 for output in self.outputs:
                     output_name = output.__class__.__name__
@@ -314,6 +320,7 @@ class NotifierApp:
             # Create plugins
             logger.debug("Creating plugins...")
             self.create_plugins(config)
+            self.filters = parse_filters(config.get("filters", []))
 
             if not self.sources and not self.outputs:
                 logger.error("No plugins configured")

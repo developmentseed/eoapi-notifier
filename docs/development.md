@@ -126,6 +126,7 @@ class MyOutput(BaseOutput):
 
     async def send_event(self, event: NotificationEvent) -> bool:
         try:
+            # Built-in mqtt/cloudevents outputs use eoapi_notifier.core.ogc.build_cloudevent().
             payload = {
                 "id": event.id,
                 "source": event.source,

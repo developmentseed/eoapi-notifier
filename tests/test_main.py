@@ -11,6 +11,8 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 import yaml
 
+from eoapi_notifier.core.event import NotificationEvent
+from eoapi_notifier.core.filter import FilterConfig
 from eoapi_notifier.core.main import NotifierApp, setup_logging
 
 
@@ -318,6 +320,49 @@ class TestNotifierApp:
         await asyncio.gather(self.app.process_events(), trigger_shutdown())
 
         mock_output.send_event.assert_called_with(mock_event)
+
+    async def test_process_events_applies_filters(self) -> None:
+        """Test filtered events are not forwarded to outputs."""
+        allowed = NotificationEvent(
+            source="/test",
+            type="test",
+            operation="INSERT",
+            collection="allowed",
+            item_id="item-1",
+        )
+        blocked = NotificationEvent(
+            source="/test",
+            type="test",
+            operation="INSERT",
+            collection="blocked",
+            item_id="item-2",
+        )
+
+        mock_source = Mock()
+        mock_source.__class__.__name__ = "MockSource"
+
+        async def mock_listen() -> AsyncIterator[Any]:
+            yield allowed
+            yield blocked
+            while not self.app._shutdown_event.is_set():
+                await asyncio.sleep(0.01)
+
+        mock_source.listen = mock_listen
+        mock_output = AsyncMock()
+        mock_output.send_event.return_value = True
+        mock_output.__class__.__name__ = "MockOutput"
+
+        self.app.sources = [mock_source]
+        self.app.outputs = [mock_output]
+        self.app.filters = [FilterConfig(collections=["allowed"])]
+
+        async def trigger_shutdown() -> None:
+            await asyncio.sleep(0.1)
+            self.app._shutdown_event.set()
+
+        await asyncio.gather(self.app.process_events(), trigger_shutdown())
+
+        mock_output.send_event.assert_called_once_with(allowed)
 
     async def test_process_events_output_error(self) -> None:
         """Test event processing with output error."""

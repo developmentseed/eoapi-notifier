@@ -23,6 +23,8 @@ class NotificationEvent(BaseModel):
         collection: STAC collection ID
         item_id: STAC item ID
         timestamp: Event timestamp
+        geometry: GeoJSON geometry
+        bbox: Bounding box [minx, miny, maxx, maxy]
         data: Additional event data
     """
 
@@ -33,4 +35,6 @@ class NotificationEvent(BaseModel):
     collection: str
     item_id: str | None = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    geometry: dict[str, Any] | None = None
+    bbox: list[float] | None = None
     data: dict[str, Any] = Field(default_factory=dict)

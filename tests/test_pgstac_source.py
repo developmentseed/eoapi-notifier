@@ -243,6 +243,30 @@ class TestPgSTACSourceBasic:
         source = PgSTACSource(basic_config)
         assert source._create_notification_event("invalid json") is None
 
+    async def test_enrich_geometry(self, basic_config: PgSTACSourceConfig) -> None:
+        """Test geometry enrichment from pgSTAC query."""
+        source = PgSTACSource(basic_config)
+        mock_connection = AsyncMock()
+        mock_connection.fetchrow.return_value = {
+            "geometry": '{"type": "Point", "coordinates": [1, 2]}',
+            "bbox": "[1, 2, 3, 4]",
+        }
+        source._connection = mock_connection
+        source._connected = True
+
+        event = NotificationEvent(
+            source="/test",
+            type="test",
+            operation="INSERT",
+            collection="test",
+            item_id="item-123",
+        )
+        await source._enrich_geometry(event)
+
+        assert event.geometry == {"type": "Point", "coordinates": [1, 2]}
+        assert event.bbox == [1.0, 2.0, 3.0, 4.0]
+        mock_connection.fetchrow.assert_awaited_once()
+
     def test_status_without_correlation(self, basic_config: PgSTACSourceConfig) -> None:
         """Test status reporting without correlation."""
         source = PgSTACSource(basic_config)

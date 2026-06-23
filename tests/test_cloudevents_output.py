@@ -6,9 +6,9 @@ import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from cloudevents.http import CloudEvent
 
 from eoapi_notifier.core.event import NotificationEvent
+from eoapi_notifier.core.ogc import build_cloudevent
 from eoapi_notifier.core.plugin import PluginMetadata
 from eoapi_notifier.outputs.cloudevents import CloudEventsAdapter, CloudEventsConfig
 
@@ -31,10 +31,8 @@ class TestCloudEventsConfig:
 
         assert config.endpoint is None
         assert config.source == "/eoapi/stac"
-        assert config.event_type == "org.eoapi.stac"
         assert config.timeout == 30.0
         assert config.max_retries == 3
-        assert config.max_header_length == 4096
 
     def test_endpoint_validation_error(self) -> None:
         """Test endpoint validation."""
@@ -149,14 +147,46 @@ class TestCloudEventsAdapter:
         adapter._client = mock_client
         adapter._running = True
 
-        with patch("eoapi_notifier.outputs.cloudevents.to_binary") as mock_to_binary:
-            mock_to_binary.return_value = ({"ce-id": "test"}, b"data")
+        with patch(
+            "eoapi_notifier.outputs.cloudevents.to_structured"
+        ) as mock_structured:
+            mock_structured.return_value = ({"ce-id": "test"}, b'{"data":{}}')
 
             result = await adapter.send_event(sample_event)
 
             assert result is True
             mock_client.post.assert_called_once()
             mock_response.raise_for_status.assert_called_once()
+
+    def test_build_cloudevent_ogc_format(
+        self, adapter: CloudEventsAdapter, sample_event: NotificationEvent
+    ) -> None:
+        """Test NotificationEvent to OGC CloudEvent conversion."""
+        cloud_event = build_cloudevent(sample_event, source=adapter.config.source)
+
+        assert cloud_event["source"] == "/eoapi/stac"
+        assert cloud_event["type"] == "org.ogc.api.collection.item.create"
+        assert cloud_event["subject"] == "test-item"
+        assert cloud_event["collection"] == "test-collection"
+
+    def test_operation_mapping(self, adapter: CloudEventsAdapter) -> None:
+        """Test operation to OGC event type mapping."""
+        test_cases = [
+            ("INSERT", "org.ogc.api.collection.item.create"),
+            ("UPDATE", "org.ogc.api.collection.item.replace"),
+            ("DELETE", "org.ogc.api.collection.item.delete"),
+        ]
+
+        for operation, expected in test_cases:
+            event = NotificationEvent(
+                source="/test",
+                type="test",
+                operation=operation,
+                collection="test",
+                item_id="item-1",
+            )
+            cloud_event = build_cloudevent(event, source=adapter.config.source)
+            assert cloud_event["type"] == expected
 
     async def test_send_event_no_client(
         self, adapter: CloudEventsAdapter, sample_event: NotificationEvent
@@ -210,92 +240,33 @@ class TestCloudEventsAdapter:
         result = await adapter.send_event(sample_event)
         assert result is False
 
-    def test_convert_to_cloudevent(
-        self, adapter: CloudEventsAdapter, sample_event: NotificationEvent
-    ) -> None:
-        """Test NotificationEvent to CloudEvent conversion."""
-        cloud_event = adapter._convert_to_cloudevent(sample_event)
-
-        assert isinstance(cloud_event, CloudEvent)
-        assert cloud_event["source"] == "/eoapi/stac"
-        assert cloud_event["type"] == "org.eoapi.stac.created"
-        assert cloud_event["subject"] == "test-item"
-        assert cloud_event["collection"] == "test-collection"
-
-    def test_truncate_header(self, adapter: CloudEventsAdapter) -> None:
-        """Test header value truncation."""
-        # Short string should not be truncated
-        short = "short-string"
-        assert adapter._truncate_header(short) == short
-
-        # None should remain None
-        assert adapter._truncate_header(None) is None
-
-        # Long string should be truncated to max_header_length bytes
-        long_string = "a" * 3000
-        truncated = adapter._truncate_header(long_string)
-        assert truncated is not None
-        assert len(truncated.encode("utf-8")) <= adapter.config.max_header_length
-        assert len(truncated) <= adapter.config.max_header_length
-
-        # UTF-8 multi-byte characters should be handled correctly
-        unicode_string = "测试" * 1000  # Chinese characters (3 bytes each)
-        truncated_unicode = adapter._truncate_header(unicode_string)
-        assert truncated_unicode is not None
-        assert (
-            len(truncated_unicode.encode("utf-8")) <= adapter.config.max_header_length
-        )
-        # Should not break in the middle of a character
-        assert truncated_unicode.encode("utf-8").decode("utf-8") == truncated_unicode
-
-    def test_convert_to_cloudevent_with_long_headers(
-        self, config: CloudEventsConfig
-    ) -> None:
-        """Test CloudEvent conversion with long header values."""
-        config.max_header_length = 50  # Small limit for testing
-        adapter = CloudEventsAdapter(config)
-
-        # Create event with long item_id and collection
-        event = NotificationEvent(
-            source="/test/source",
-            type="test.type",
-            operation="INSERT",
-            collection="a-very-long-collection-name-that-exceeds-the-limit",
-            item_id="a-very-long-item-id-that-also-exceeds-the-configured-limit",
-        )
-
-        cloud_event = adapter._convert_to_cloudevent(event)
-
-        # Check that long values are truncated in headers
-        assert "subject" in cloud_event
-        assert "collection" in cloud_event
-        assert len(cloud_event["subject"].encode("utf-8")) <= config.max_header_length
-        assert (
-            len(cloud_event["collection"].encode("utf-8")) <= config.max_header_length
-        )
-
-        # Original values should still be in data payload
-        assert cloud_event.data["item_id"] == event.item_id
-        assert cloud_event.data["collection"] == event.collection
-
-    def test_operation_mapping(self, adapter: CloudEventsAdapter) -> None:
-        """Test operation to event type mapping."""
-        test_cases = [
-            ("INSERT", "created"),
-            ("UPDATE", "updated"),
-            ("DELETE", "deleted"),
-            ("UNKNOWN", "unknown"),
-        ]
-
-        for operation, expected in test_cases:
-            event = NotificationEvent(
-                source="/test",
-                type="test",
-                operation=operation,
-                collection="test",
+    @patch.dict(
+        os.environ,
+        {
+            "K_CE_OVERRIDES": (
+                '{"extensions": {"extra": "test-value", "priority": "high"}}'
             )
-            cloud_event = adapter._convert_to_cloudevent(event)
-            assert cloud_event["type"].endswith(f".{expected}")
+        },
+    )
+    async def test_send_event_applies_knative_overrides(
+        self, config: CloudEventsConfig, sample_event: NotificationEvent
+    ) -> None:
+        """Test send_event applies K_CE_OVERRIDES extensions."""
+        import json
+
+        adapter = CloudEventsAdapter(config)
+        mock_client = AsyncMock()
+        mock_response = MagicMock()
+        mock_client.post.return_value = mock_response
+        adapter._client = mock_client
+        adapter._running = True
+
+        await adapter.send_event(sample_event)
+
+        posted_body = mock_client.post.call_args.kwargs["content"]
+        payload = json.loads(posted_body)
+        assert payload.get("extra") == "test-value"
+        assert payload.get("priority") == "high"
 
     async def test_health_check(self, adapter: CloudEventsAdapter) -> None:
         """Test health check."""
@@ -309,60 +280,3 @@ class TestCloudEventsAdapter:
         # Running with client
         adapter._client = MagicMock()
         assert await adapter.health_check() is True
-
-    @patch.dict(
-        os.environ,
-        {
-            "K_CE_OVERRIDES": (
-                '{"extensions": {"extra": "test-value", "priority": "high"}}'
-            )
-        },
-    )
-    def test_convert_to_cloudevent_with_overrides(
-        self, config: CloudEventsConfig, sample_event: NotificationEvent
-    ) -> None:
-        """Test CloudEvent conversion with K_CE_OVERRIDES."""
-        # Create adapter after environment variable is set
-        adapter = CloudEventsAdapter(config)
-        cloud_event = adapter._convert_to_cloudevent(sample_event)
-
-        assert isinstance(cloud_event, CloudEvent)
-        assert cloud_event["extra"] == "test-value"
-        assert cloud_event["priority"] == "high"
-
-    @patch.dict(os.environ, {"K_CE_OVERRIDES": '{"extensions": {"number": 123}}'})
-    def test_convert_to_cloudevent_with_number_override(
-        self, config: CloudEventsConfig, sample_event: NotificationEvent
-    ) -> None:
-        """Test CloudEvent conversion with number in K_CE_OVERRIDES."""
-        # Create adapter after environment variable is set
-        adapter = CloudEventsAdapter(config)
-        cloud_event = adapter._convert_to_cloudevent(sample_event)
-
-        assert cloud_event["number"] == "123"  # Should be converted to string
-
-    @patch.dict(os.environ, {"K_CE_OVERRIDES": "invalid-json"})
-    def test_convert_to_cloudevent_invalid_overrides(
-        self, config: CloudEventsConfig, sample_event: NotificationEvent
-    ) -> None:
-        """Test CloudEvent conversion with invalid K_CE_OVERRIDES JSON."""
-        # Create adapter after environment variable is set
-        adapter = CloudEventsAdapter(config)
-        cloud_event = adapter._convert_to_cloudevent(sample_event)
-
-        # Should work normally without overrides
-        assert isinstance(cloud_event, CloudEvent)
-        assert cloud_event["source"] == "/eoapi/stac"
-
-    @patch.dict(os.environ, {"K_CE_OVERRIDES": '{"other": "field"}'})
-    def test_convert_to_cloudevent_no_extensions(
-        self, config: CloudEventsConfig, sample_event: NotificationEvent
-    ) -> None:
-        """Test CloudEvent conversion with K_CE_OVERRIDES but no extensions field."""
-        # Create adapter after environment variable is set
-        adapter = CloudEventsAdapter(config)
-        cloud_event = adapter._convert_to_cloudevent(sample_event)
-
-        # Should work normally without extensions
-        assert isinstance(cloud_event, CloudEvent)
-        assert cloud_event["source"] == "/eoapi/stac"

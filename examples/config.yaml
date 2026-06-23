@@ -27,6 +27,13 @@ sources:
       # enable_correlation: true       # PGSTAC_ENABLE_CORRELATION
       # correlation_window: 5.0        # PGSTAC_CORRELATION_WINDOW
       # cleanup_interval: 1.0          # PGSTAC_CLEANUP_INTERVAL
+      # include_geometry: true          # PGSTAC_INCLUDE_GEOMETRY
+
+# Optional: filter events before forwarding to outputs
+# filters:
+#   - collections: ["sentinel-2-l2a"]
+#     operations: ["create", "replace"]
+#     bbox: [-180, -90, 180, 90]
 
 # Outputs: Define where notifications are sent
 outputs:
@@ -46,22 +53,17 @@ outputs:
       # topic: "eoapi/"               # MQTT_TOPIC
       # qos: 1                        # MQTT_QOS
 
-  # CloudEvents HTTP output for sending events as CloudEvents
-  #
-  # Besides the regular overwrite, this plugin also supports K_SINK
-  # https://knative.dev/docs/eventing/custom-event-source/sinkbinding/
+  # CloudEvents HTTP output (OGC PubSub CloudEvents-JSON; type derived from operation)
   - type: cloudevents
     config:
       endpoint: https://example.com/webhook  # CLOUDEVENTS_ENDPOINT or K_SINK
 
-      # Optional: CloudEventattributes
+      # Optional: CloudEvent attributes
       # source: "/eoapi/stac"               # CLOUDEVENTS_SOURCE
-      # event_type: "org.eoapi.stac"        # CLOUDEVENTS_EVENT_TYPE
 
       # Optional: HTTP settings
       # timeout: 30.0                       # CLOUDEVENTS_TIMEOUT
       # max_retries: 3                      # CLOUDEVENTS_MAX_RETRIES
-      # max_header_length: 4096             # CLOUDEVENTS_MAX_HEADER_LENGTH
 
 # Example with multiple sources and outputs
 # sources:
