@@ -44,7 +44,7 @@ jobs:
         uses: azure/setup-helm@v5
 
       - name: Build Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false
