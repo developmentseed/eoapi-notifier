@@ -56,7 +56,7 @@ sources:
       host: localhost
       port: 5432
       database: postgis
-      username: username
+      user: postgres
       password: password
 
 # Outputs: Define where notifications are sent
@@ -67,7 +67,9 @@ outputs:
       broker_port: 1883
 ```
 
-See [examples/config.yaml](./examples/config.yaml) for a complete configuration example with all available options.
+Both outputs publish [OGC PubSub CloudEvents-JSON](https://github.com/opengeospatial/pubsub) messages (types such as `org.ogc.api.collection.item.create`). The pgSTAC source can enrich events with item geometry (`include_geometry: true`, default). Optional top-level `filters` restrict forwarding by collection, operation (`create`/`replace`/`delete`), and bbox.
+
+See [examples/config.yaml](./examples/config.yaml) for configuration and [examples/output-create.json](./examples/output-create.json) / [examples/output-delete.json](./examples/output-delete.json) for sample MQTT and CloudEvents payloads.
 
 ## Kubernetes Deployment
 
@@ -87,7 +89,8 @@ See [Helm Chart README](helm-chart/eoapi-notifier/README.md) for configuration o
 - `pgstac`: Monitor PostgreSQL/pgSTAC database changes
 
 #### Outputs
-- `mqtt`: Publish events to MQTT broker
+- `mqtt`: Publish OGC CloudEvents-JSON to an MQTT broker
+- `cloudevents`: POST OGC CloudEvents-JSON to an HTTP endpoint (or Knative `K_SINK`)
 
 ## Development
 

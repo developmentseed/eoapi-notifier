@@ -8,14 +8,13 @@ Supports standard CloudEvents environment variables and KNative SinkBinding.
 import json
 import os
 from typing import Any
-from uuid import uuid4
 
 import httpx
-from cloudevents.conversion import to_binary
-from cloudevents.http import CloudEvent
+from cloudevents.conversion import to_structured
 from pydantic import field_validator, model_validator
 
 from ..core.event import NotificationEvent
+from ..core.ogc import build_cloudevent
 from ..core.plugin import BaseOutput, BasePluginConfig, PluginMetadata
 
 
@@ -25,11 +24,9 @@ class CloudEventsConfig(BasePluginConfig):
 
     endpoint: str | None = None
     source: str = "/eoapi/stac"
-    event_type: str = "org.eoapi.stac"
     timeout: float = 30.0
     max_retries: int = 3
     retry_backoff: float = 1.0
-    max_header_length: int = 4096
     overrides: dict[str, str] = {}
 
     @field_validator("endpoint")
@@ -56,11 +53,9 @@ class CloudEventsConfig(BasePluginConfig):
         return {
             "endpoint": None,  # Uses K_SINK env var if not set
             "source": "/eoapi/stac",
-            "event_type": "org.eoapi.stac",
             "timeout": 30.0,
             "max_retries": 3,
             "retry_backoff": 1.0,
-            "max_header_length": 4096,
         }
 
     @classmethod
@@ -81,7 +76,6 @@ class CloudEventsConfig(BasePluginConfig):
         return {
             "Endpoint": self.endpoint or "K_SINK env var",
             "Source": self.source,
-            "Event Type": self.event_type,
             "Timeout": f"{self.timeout}s",
             "Max Retries": self.max_retries,
         }
@@ -173,17 +167,20 @@ class CloudEventsAdapter(BaseOutput):
 
             # Convert to CloudEvent
             self.logger.debug(f"Converting event {event.id} to CloudEvent format...")
-            cloud_event = self._convert_to_cloudevent(event)
+            cloud_event = build_cloudevent(event, source=self.config.source)
+            for key, value in self._ce_extensions.items():
+                cloud_event[key] = str(value)
             self.logger.debug(
                 f"CloudEvent created: id={cloud_event['id']}, "
                 f"type={cloud_event['type']}"
             )
 
-            # Convert to binary format
-            self.logger.debug("Converting CloudEvent to binary format...")
-            headers, data = to_binary(cloud_event)
+            # Convert to CloudEvents-JSON
+            self.logger.debug("Converting CloudEvent to structured format...")
+            structured_headers, structured_body = to_structured(cloud_event)
+            headers = dict(structured_headers)
             self.logger.debug(
-                f"Binary conversion complete, headers: {list(headers.keys())}"
+                f"Structured conversion complete, headers: {list(headers.keys())}"
             )
 
             # Send HTTP POST
@@ -191,7 +188,9 @@ class CloudEventsAdapter(BaseOutput):
                 f"Sending CloudEvent {cloud_event['id']} to {endpoint} "
                 f"(timeout: {self.config.timeout}s)"
             )
-            response = await self._client.post(endpoint, headers=headers, data=data)
+            response = await self._client.post(
+                endpoint, headers=headers, content=structured_body
+            )
             response.raise_for_status()
 
             self.logger.debug(
@@ -218,67 +217,6 @@ class CloudEventsAdapter(BaseOutput):
                 exc_info=True,
             )
             return False
-
-    def _truncate_header(self, value: str | None) -> str | None:
-        """Truncate header value to max_header_length if needed."""
-        if not value:
-            return value
-        if len(value.encode("utf-8")) <= self.config.max_header_length:
-            return value
-        # Truncate to byte limit, ensuring valid UTF-8
-        truncated = value.encode("utf-8")[: self.config.max_header_length]
-        return truncated.decode("utf-8", errors="ignore")
-
-    def _convert_to_cloudevent(self, event: NotificationEvent) -> CloudEvent:
-        """Convert NotificationEvent to CloudEvent."""
-        # Use config values which now include environment overrides
-        source = self.config.source
-        event_type_base = self.config.event_type
-
-        # Use pre-parsed KNative CE overrides
-        ce_extensions = self._ce_extensions
-
-        # Map operation to event type suffix
-        operation_map = {"INSERT": "created", "UPDATE": "updated", "DELETE": "deleted"}
-        operation = operation_map.get(event.operation.upper(), event.operation.lower())
-
-        attributes = {
-            "id": str(uuid4()),
-            "source": source,
-            "type": f"{event_type_base}.{operation}",
-            "time": event.timestamp.isoformat(),
-            "datacontenttype": "application/json",
-        }
-
-        # Add subject if item_id exists
-        if event.item_id:
-            truncated_subject = self._truncate_header(event.item_id)
-            if truncated_subject:
-                attributes["subject"] = truncated_subject
-
-        # Add collection attribute
-        if event.collection:
-            truncated_collection = self._truncate_header(event.collection)
-            if truncated_collection:
-                attributes["collection"] = truncated_collection
-
-        # Apply KNative CE extension overrides
-        for key, value in ce_extensions.items():
-            attributes[key] = str(value)
-
-        # Event data payload
-        data = {
-            "id": event.id,
-            "source": event.source,
-            "type": event.type,
-            "operation": event.operation,
-            "collection": event.collection,
-            "item_id": event.item_id,
-            "timestamp": event.timestamp.isoformat(),
-            **event.data,
-        }
-
-        return CloudEvent(attributes, data)
 
     async def health_check(self) -> bool:
         """Check if the adapter is healthy."""

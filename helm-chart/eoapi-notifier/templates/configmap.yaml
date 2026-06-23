@@ -31,3 +31,8 @@ data:
           {{- toYaml .config | nindent 10}}
           {{- end}}
     {{- end}}
+
+    {{- with .Values.config.filters}}
+    filters:
+    {{- toYaml . | nindent 4}}
+    {{- end}}

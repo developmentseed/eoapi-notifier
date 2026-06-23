@@ -1,0 +1,11 @@
+{
+  "specversion": "1.0",
+  "id": "pgstac-item-99",
+  "source": "/eoapi/stac",
+  "type": "org.ogc.api.collection.item.delete",
+  "datacontenttype": "text/plain",
+  "subject": "item-99",
+  "time": "2024-01-02T00:00:00+00:00",
+  "collection": "sentinel-2-l2a",
+  "data": "item-99"
+}

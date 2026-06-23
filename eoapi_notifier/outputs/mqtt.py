@@ -6,14 +6,15 @@ with asyncio integration.
 """
 
 import asyncio
-import json
 import ssl
 from typing import Any
 
 import paho.mqtt.client as mqtt
+from cloudevents.conversion import to_structured
 from pydantic import field_validator
 
 from ..core.event import NotificationEvent
+from ..core.ogc import build_cloudevent
 from ..core.plugin import BaseOutput, BasePluginConfig, PluginMetadata
 
 
@@ -337,17 +338,9 @@ class MQTTAdapter(BaseOutput):
             return False
 
         try:
-            # Convert event to JSON payload
-            payload = {
-                "id": event.id,
-                "source": event.source,
-                "type": event.type,
-                "operation": event.operation,
-                "collection": event.collection,
-                "item_id": event.item_id,
-                "timestamp": event.timestamp.isoformat(),
-                "data": event.data,
-            }
+            cloud_event = build_cloudevent(event)
+            _, structured_body = to_structured(cloud_event)
+            message = structured_body.decode("utf-8")
 
             # Determine topic (could be collection-specific)
             topic = (
@@ -357,12 +350,10 @@ class MQTTAdapter(BaseOutput):
             )
 
             # Publish to MQTT
-            message = json.dumps(payload, default=str)
             self.logger.debug(
                 f"Publishing event {event.id} to topic '{topic}' "
                 f"(QoS {self.config.qos})"
             )
-            self.logger.debug(f"Message payload: {message}")
             msg_info = self._client.publish(
                 topic=topic,
                 payload=message.encode("utf-8"),

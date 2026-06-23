@@ -403,12 +403,9 @@ class TestMQTTAdapter:
         payload_str = payload_bytes.decode("utf-8")
         payload_data = json.loads(payload_str)
 
-        assert payload_data["id"] == sample_event.id
-        assert payload_data["source"] == "/test/source"
-        assert payload_data["type"] == "test.event"
-        assert payload_data["operation"] == "INSERT"
-        assert payload_data["collection"] == "test-collection"
-        assert payload_data["item_id"] == "test-item-123"
+        assert payload_data["type"] == "org.ogc.api.collection.item.create"
+        assert payload_data["data"]["collection"] == "test-collection"
+        assert payload_data["data"]["id"] == "test-item-123"
 
     @patch("eoapi_notifier.outputs.mqtt.mqtt")
     async def test_send_event_success_qos1(

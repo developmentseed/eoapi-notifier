@@ -382,6 +382,11 @@ class PgSTACSourceConfig(BasePluginConfig):
         le=10000,
     )
 
+    include_geometry: bool = Field(
+        default=True,
+        description="Query pgSTAC for item geometry and bbox on non-DELETE events",
+    )
+
     @field_validator("port")
     @classmethod
     def validate_port(cls, v: int) -> int:
@@ -405,6 +410,7 @@ class PgSTACSourceConfig(BasePluginConfig):
             "correlation_window": DEFAULT_CORRELATION_WINDOW,
             "cleanup_interval": DEFAULT_CLEANUP_INTERVAL,
             "event_queue_size": DEFAULT_EVENT_QUEUE_SIZE,
+            "include_geometry": True,
         }
 
     @classmethod
@@ -670,6 +676,12 @@ class PgSTACSource(BaseSource):
 
                 event = self._create_notification_event(notification)
                 if event:
+                    if (
+                        self.config.include_geometry
+                        and event.operation.upper() != "DELETE"
+                        and event.item_id
+                    ):
+                        await self._enrich_geometry(event)
                     await self._event_queue.put(event)
                     self.logger.debug(
                         "✓ Event #%d queued: %s", notification_count, event.id
@@ -788,6 +800,38 @@ class PgSTACSource(BaseSource):
                 payload,
             )
             return None
+
+    async def _enrich_geometry(self, event: NotificationEvent) -> None:
+        """Fetch geometry and bbox from pgSTAC for the changed item."""
+        if not self._connection or not self._connected:
+            return
+        try:
+            row = await self._connection.fetchrow(
+                """
+                SELECT ST_AsGeoJSON(geometry)::json AS geometry,
+                       content->'bbox' AS bbox
+                FROM pgstac.items
+                WHERE id = $1 AND collection = $2
+                """,
+                event.item_id,
+                event.collection,
+            )
+            if not row:
+                return
+            geom = row["geometry"]
+            if geom:
+                event.geometry = geom if isinstance(geom, dict) else json.loads(geom)
+            bbox = row["bbox"]
+            if bbox is not None:
+                bbox = bbox if isinstance(bbox, list) else json.loads(bbox)
+                event.bbox = [float(x) for x in bbox]
+        except Exception as e:
+            self.logger.warning(
+                "Failed to fetch geometry for %s/%s: %s",
+                event.collection,
+                event.item_id,
+                e,
+            )
 
     async def _raw_event_stream(self) -> AsyncIterator[NotificationEvent]:
         """Generate raw event stream from the event queue."""
