@@ -1,6 +1,8 @@
 name: Release
 
 on:
+  push:
+    branches: [main]
   release:
     types: [published]
 
@@ -10,9 +12,34 @@ env:
   CHART_NAME: eoapi-notifier
 
 jobs:
-  release:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
     name: Release Docker and Helm
     runs-on: ubuntu-latest
+    needs: release-please
+    if: |
+      always() && (
+        github.event_name == 'release' ||
+        (github.event_name == 'push' &&
+          needs.release-please.result == 'success' &&
+          needs.release-please.outputs.release_created == 'true')
+      )
     permissions:
       contents: read
       packages: write
@@ -20,11 +47,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'release' && github.ref || format('refs/tags/{0}', needs.release-please.outputs.tag_name) }}
 
       - name: Extract version
         id: version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/}
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="${{ needs.release-please.outputs.tag_name }}"
+          fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
@@ -46,7 +79,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=tag
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.version }}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
@@ -59,11 +92,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Update Chart.yaml
-        run: |
-          sed -i "s|^version:.*|version: ${{ steps.version.outputs.version }}|" helm-chart/${{ env.CHART_NAME }}/Chart.yaml
-          sed -i "s|^appVersion:.*|appVersion: \"${{ steps.version.outputs.version }}\"|" helm-chart/${{ env.CHART_NAME }}/Chart.yaml
 
       - name: Lint and package Helm chart
         run: |

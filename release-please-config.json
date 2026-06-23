@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "0cb6a6b9867f1e0bb429530147c33bd3d9a0b2eb",
+  "packages": {
+    ".": {
+      "release-type": "python",
+      "package-name": "eoapi-notifier",
+      "changelog-path": "CHANGELOG.md",
+      "changelog-type": "github",
+      "pull-request-title-pattern": "chore: release ${version}",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
+      "include-component-in-tag": false,
+      "include-v-in-tag": false,
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "helm-chart/eoapi-notifier/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "helm-chart/eoapi-notifier/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        }
+      ]
+    }
+  }
+}
