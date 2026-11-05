@@ -1,6 +1,3 @@
-# A stage rather than COPY --from=<image>, as Dependabot only reads FROM lines
-FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
-
 FROM python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30
 
 # Set environment variables
@@ -13,8 +10,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv, which the chart calls at runtime, and remove pip, which nothing does
-COPY --from=uv /uv /usr/local/bin/
-RUN python -m pip uninstall -y pip setuptools wheel
+RUN python -m pip install --no-cache-dir uv==0.13.7 && python -m pip uninstall -y pip
 
 # Set work directory
 WORKDIR /app
