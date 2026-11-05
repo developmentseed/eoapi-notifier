@@ -9,8 +9,10 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv, which the chart calls at runtime, and remove pip, which nothing does
-RUN python -m pip install --no-cache-dir uv==0.13.7 && python -m pip uninstall -y pip
+# Install uv, which the chart calls at runtime, and remove pip, which nothing does.
+# The pin has its own file because Dependabot does not read RUN lines; the uv entry in dependabot.yml bumps it.
+COPY docker/requirements.txt /tmp/requirements.txt
+RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt && python -m pip uninstall -y pip && rm /tmp/requirements.txt
 
 # Set work directory
 WORKDIR /app
