@@ -15,3 +15,50 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  - package-ecosystem: "uv"
+    directory: "/"
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: "monthly"
+    allow:
+      # Transitive packages too (certifi, anyio): the default only updates direct ones.
+      - dependency-type: "all"
+    ignore:
+      # cloudevents 2 moves the 1.x API we import (cloudevents.http, .conversion) under cloudevents.v1.
+      # Remove this with that port: it also blocks security-update PRs for cloudevents.
+      - dependency-name: "cloudevents"
+        update-types: ["version-update:semver-major"]
+    groups:
+      all:
+        patterns:
+          - "*"
+      # Without this, each security update gets its own PR.
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    commit-message:
+      # The image is only rebuilt on a release, so these commits are fixes.
+      prefix: "fix(deps)"
+
+  # Weekly, as the python base image carries the Debian fixes.
+  - package-ecosystem: "docker"
+    directory: "/"
+    # Official python tags are often re-pushed within a week, and a digest-only
+    # refresh waits out the cooldown: 7 days would skip most weekly runs.
+    cooldown:
+      default-days: 3
+    schedule:
+      interval: "weekly"
+    ignore:
+      # CI only tests Python 3.12, so moving off it is a deliberate upgrade.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    groups:
+      docker:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "fix(deps)"
