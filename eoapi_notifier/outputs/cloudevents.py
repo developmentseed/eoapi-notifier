@@ -10,7 +10,7 @@ import os
 from typing import Any
 
 import httpx
-from cloudevents.conversion import to_structured
+from cloudevents.v1.conversion import to_structured
 from pydantic import field_validator, model_validator
 
 from ..core.event import NotificationEvent

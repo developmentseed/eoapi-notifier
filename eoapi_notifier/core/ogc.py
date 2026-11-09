@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from cloudevents.http import CloudEvent
+from cloudevents.v1.http import CloudEvent
 
 from .event import NotificationEvent
 
