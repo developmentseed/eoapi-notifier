@@ -7,6 +7,7 @@ on:
     paths:
       - 'Dockerfile'
       - '.dockerignore'
+      - 'docker/**'
       - 'pyproject.toml'
       - 'uv.lock'
       - 'eoapi_notifier/**'
