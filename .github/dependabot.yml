@@ -26,7 +26,8 @@ updates:
       # Transitive packages too (certifi, anyio): the default only updates direct ones.
       - dependency-type: "all"
     ignore:
-      # cloudevents 2 removes cloudevents.http; moving to it is a separate port.
+      # cloudevents 2 moves the 1.x API we import (cloudevents.http, .conversion) under cloudevents.v1.
+      # Remove this with that port: it also blocks security-update PRs for cloudevents.
       - dependency-name: "cloudevents"
         update-types: ["version-update:semver-major"]
     groups:
