@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from cloudevents.conversion import to_structured
+from cloudevents.v1.conversion import to_structured
 
 from eoapi_notifier.core.event import NotificationEvent
 from eoapi_notifier.core.filter import FilterConfig, matches, parse_filters
