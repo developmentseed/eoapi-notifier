@@ -554,7 +554,7 @@ class TestMQTTAdapter:
 
         assert adapter._connected is False
 
-    def test_on_publish_callback(self, adapter: MQTTAdapter) -> None:
+    async def test_on_publish_callback(self, adapter: MQTTAdapter) -> None:
         """Test publish completion callback."""
         # Create a future for message ID
         future: asyncio.Future[bool] = asyncio.Future()
