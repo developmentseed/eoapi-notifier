@@ -29,11 +29,7 @@ updates:
       all:
         patterns:
           - "*"
-      # Without this, each security update gets its own PR.
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
+      # No security-updates group: while a grouped security PR is open, Dependabot defers fixes for packages not already in it.
     commit-message:
       # The image is only rebuilt on a release, so these commits are fixes.
       prefix: "fix(deps)"
