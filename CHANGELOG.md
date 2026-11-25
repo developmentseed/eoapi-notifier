@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.2 (2026-11-25)
+
+## What's Changed
+* fix(deps): bump the minor-and-patch group with 4 updates by @dependabot[bot] in https://github.com/developmentseed/eoapi-notifier/pull/34
+* fix(deps): bump googleapis/release-please-action from 4.4.1 to 5.0.0 by @dependabot[bot] in https://github.com/developmentseed/eoapi-notifier/pull/35
+* fix(deps): bump docker/setup-buildx-action from 3.12.0 to 4.4.1 by @dependabot[bot] in https://github.com/developmentseed/eoapi-notifier/pull/36
+* fix(deps): bump actions/checkout from 5.0.1 to 7.0.1 by @dependabot[bot] in https://github.com/developmentseed/eoapi-notifier/pull/37
+* fix(deps): bump actions/cache from 5.0.5 to 6.1.0 by @dependabot[bot] in https://github.com/developmentseed/eoapi-notifier/pull/38
+* fix(deps): bump python from `b18b261` to `5e2bdb1` in the docker group by @dependabot[bot] in https://github.com/developmentseed/eoapi-notifier/pull/39
+* ci: stop grouping Dependabot security updates by @lhoupert in https://github.com/developmentseed/eoapi-notifier/pull/42
+
+
+**Full Changelog**: https://github.com/developmentseed/eoapi-notifier/compare/0.1.1...0.1.2
+
 ## 0.1.1 (2026-11-09)
 
 ## What's Changed
